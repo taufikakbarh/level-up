@@ -1,0 +1,435 @@
+import { HABIT_LIBRARY, TITLES, STREAK_MILESTONES, COACH_MESSAGES } from "../constants/habitLibrary";
+
+// ─── XP / Level helpers ────────────────────────────────────────
+
+export function xpForLevel(level) {
+  return Math.floor(100 * Math.pow(1.5, level - 1));
+}
+
+function applyXpToStat(stat, xpGain) {
+  let { level, xp, totalXp } = stat;
+  const gained = xpGain;
+  xp += gained;
+  totalXp += gained;
+  let leveled = false;
+  const levelUps = [];
+  while (xp >= xpForLevel(level)) {
+    xp -= xpForLevel(level);
+    level += 1;
+    leveled = true;
+    levelUps.push(level);
+  }
+  return { level, xp, totalXp, keystoneBonus: stat.keystoneBonus, leveled, levelUps };
+}
+
+// ─── Date helpers ──────────────────────────────────────────────
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function diffDays(a, b) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return Math.round((db - da) / 86400000);
+}
+
+// ─── Streak multiplier ─────────────────────────────────────────
+
+function streakMultiplier(streak) {
+  if (streak >= 30) return 2.0;
+  if (streak >= 7)  return 1.5;
+  if (streak >= 3)  return 1.2;
+  return 1.0;
+}
+
+// ─── Coach message picker ──────────────────────────────────────
+
+function pickCoach(pct, dayCount) {
+  const pool =
+    pct === 1   ? COACH_MESSAGES.perfect :
+    pct >= 0.5  ? COACH_MESSAGES.good :
+    pct > 0     ? COACH_MESSAGES.rough :
+                  COACH_MESSAGES.zero;
+  return pool[dayCount % pool.length];
+}
+
+// ─── Title checker ─────────────────────────────────────────────
+
+function checkTitles(state) {
+  const newTitles = [];
+  const earned = new Set(state.player.titles);
+  for (const t of TITLES) {
+    if (earned.has(t.id)) continue;
+    let qualifies = false;
+    if (t.automationHabit) {
+      qualifies = state.playerHabits.some(
+        h => h.libraryId === t.automationHabit && h.status === "automated"
+      );
+    } else if (t.condition) {
+      qualifies = t.condition({ ...state.player, stats: state.stats, playerHabits: state.playerHabits });
+    }
+    if (qualifies) newTitles.push(t.id);
+  }
+  return newTitles;
+}
+
+// ─── Initial state factory ─────────────────────────────────────
+
+export function makeInitialState(playerName, starterHabitIds) {
+  const today = todayISO();
+  const statNames = ["vitality", "focus", "will", "output", "presence", "wisdom"];
+  const stats = {};
+  for (const s of statNames) {
+    stats[s] = { level: 1, xp: 0, totalXp: 0, keystoneBonus: false };
+  }
+
+  const playerHabits = starterHabitIds.map((libId, i) => {
+    const lib = HABIT_LIBRARY.find(h => h.id === libId);
+    return {
+      id: `ph_${String(i + 1).padStart(3, "0")}`,
+      libraryId: lib.id,
+      name: lib.name,
+      stat: lib.stat,
+      xpReward: lib.xpReward,
+      streak: 0,
+      streakFrozen: false,
+      streakBroken: false,
+      lastCompleted: null,
+      daysActive: 0,
+      status: "active",
+      isUpgraded: false,
+      upgradeOfferedAt: null,
+      automatedAt: null,
+    };
+  });
+
+  return {
+    player: {
+      id: `p_${Date.now()}`,
+      name: playerName,
+      joinedDate: today,
+      currentPhase: 1,
+      dayCount: 1,
+      globalStreak: 0,
+      globalStreakFrozen: false,
+      titles: ["t_beginning"],
+      activeTitle: "t_beginning",
+      hadComeback: false,
+    },
+    stats,
+    playerHabits,
+    today: {
+      date: today,
+      completedHabitIds: [],
+      xpEarnedByStatToday: { vitality: 0, focus: 0, will: 0, output: 0, presence: 0, wisdom: 0 },
+      totalXpToday: 0,
+      streakMultiplier: 1.0,
+      dayEnded: false,
+      coachMessage: "",
+    },
+    notifications: [],
+    history: [],
+  };
+}
+
+// ─── Reducer ───────────────────────────────────────────────────
+
+export function gameReducer(state, action) {
+  switch (action.type) {
+
+    case "ADVANCE_DAY": {
+      // Called on app open when date has changed
+      const today = todayISO();
+      if (state.today.date === today) return state;
+
+      // Archive yesterday
+      const history = [
+        ...state.history,
+        {
+          date: state.today.date,
+          completedHabitIds: state.today.completedHabitIds,
+          xpEarned: { ...state.today.xpEarnedByStatToday },
+          globalStreakCount: state.player.globalStreak,
+          phase: state.player.currentPhase,
+        },
+      ];
+
+      const yesterday = state.today.date;
+      const dayCount = state.player.dayCount + 1;
+
+      // Update per-habit streaks
+      let playerHabits = state.playerHabits.map(ph => {
+        const completedYesterday = state.today.completedHabitIds.includes(ph.id);
+        if (completedYesterday) {
+          const newStreak = ph.streak + 1;
+          const isAutomated = newStreak >= 66;
+          return {
+            ...ph,
+            streak: newStreak,
+            streakFrozen: false,
+            streakBroken: false,
+            lastCompleted: yesterday,
+            daysActive: ph.daysActive + 1,
+            status: isAutomated ? "automated" : ph.status,
+            automatedAt: isAutomated && !ph.automatedAt ? dayCount : ph.automatedAt,
+          };
+        } else {
+          // Missed
+          const daysSince = ph.lastCompleted ? diffDays(ph.lastCompleted, today) : 999;
+          if (daysSince >= 2) {
+            return { ...ph, streakFrozen: false, streakBroken: true, streak: 0 };
+          } else if (daysSince === 1 && !ph.streakFrozen) {
+            return { ...ph, streakFrozen: true };
+          }
+          return ph;
+        }
+      });
+
+      // Check upgrade offers (day 14 of any habit)
+      const notifications = [...state.notifications];
+      playerHabits = playerHabits.map(ph => {
+        if (ph.daysActive === 14 && !ph.upgradeOfferedAt && !ph.isUpgraded) {
+          const lib = HABIT_LIBRARY.find(h => h.id === ph.libraryId);
+          if (lib) {
+            notifications.push({
+              id: `notif_upgrade_${ph.id}_${dayCount}`,
+              type: "upgrade_offer",
+              habitId: ph.id,
+              message: `"${ph.name}" — 14 days consistent. Ready to upgrade?`,
+              seen: false,
+              createdAt: today,
+            });
+            return { ...ph, upgradeOfferedAt: dayCount };
+          }
+        }
+        return ph;
+      });
+
+      // Global streak
+      const completedCount = state.today.completedHabitIds.length;
+      const totalHabits = state.playerHabits.length;
+      const pct = totalHabits > 0 ? completedCount / totalHabits : 0;
+      let globalStreak = state.player.globalStreak;
+      let globalStreakFrozen = state.player.globalStreakFrozen;
+      let hadComeback = state.player.hadComeback;
+
+      if (pct >= 0.5) {
+        if (globalStreakFrozen) {
+          hadComeback = true;
+          notifications.push({
+            id: `notif_comeback_${dayCount}`,
+            type: "streak_milestone",
+            habitId: null,
+            message: "Comeback! Your frozen streak is restored. 💪",
+            seen: false,
+            createdAt: today,
+          });
+        }
+        globalStreak += 1;
+        globalStreakFrozen = false;
+      } else {
+        if (!globalStreakFrozen) {
+          globalStreakFrozen = true;
+        } else {
+          globalStreak = 0;
+          globalStreakFrozen = false;
+        }
+      }
+
+      // Phase advancement
+      let currentPhase = state.player.currentPhase;
+      if (dayCount >= 66 && currentPhase < 3) {
+        currentPhase = 3;
+        notifications.push({ id: `notif_phase3_${dayCount}`, type: "phase_advance", habitId: null, message: "Phase 3 unlocked — AUTOMATE. These are becoming who you are.", seen: false, createdAt: today });
+      } else if (dayCount >= 30 && currentPhase < 2) {
+        currentPhase = 2;
+        notifications.push({ id: `notif_phase2_${dayCount}`, type: "phase_advance", habitId: null, message: "Phase 2 unlocked — STACK. You're building momentum.", seen: false, createdAt: today });
+      }
+
+      const mult = streakMultiplier(globalStreak);
+      const newState = {
+        ...state,
+        player: {
+          ...state.player,
+          dayCount,
+          currentPhase,
+          globalStreak,
+          globalStreakFrozen,
+          hadComeback,
+        },
+        playerHabits,
+        today: {
+          date: today,
+          completedHabitIds: [],
+          xpEarnedByStatToday: { vitality: 0, focus: 0, will: 0, output: 0, presence: 0, wisdom: 0 },
+          totalXpToday: 0,
+          streakMultiplier: mult,
+          dayEnded: false,
+          coachMessage: "",
+        },
+        notifications,
+        history,
+      };
+
+      // Check new titles
+      const newTitles = checkTitles(newState);
+      if (newTitles.length > 0) {
+        return {
+          ...newState,
+          player: {
+            ...newState.player,
+            titles: [...newState.player.titles, ...newTitles],
+          },
+        };
+      }
+      return newState;
+    }
+
+    case "COMPLETE_HABIT": {
+      const { habitId } = action;
+      if (state.today.completedHabitIds.includes(habitId)) return state;
+
+      const ph = state.playerHabits.find(h => h.id === habitId);
+      if (!ph) return state;
+
+      const lib = HABIT_LIBRARY.find(h => h.id === ph.libraryId);
+      const base = ph.xpReward;
+      const mult = state.today.streakMultiplier;
+      const keystoneActive = state.stats[ph.stat]?.keystoneBonus;
+      const xpGained = Math.round(base * mult * (keystoneActive ? 1.2 : 1));
+
+      // Update stat
+      const statBefore = state.stats[ph.stat];
+      const statAfter = applyXpToStat(statBefore, xpGained);
+      const { leveled, levelUps, ...statData } = statAfter;
+
+      const newStats = { ...state.stats, [ph.stat]: statData };
+
+      // Check keystone automation
+      const updatedStats = { ...newStats };
+      if (lib?.keystone && ph.streak + 1 >= 66) {
+        updatedStats[ph.stat] = { ...updatedStats[ph.stat], keystoneBonus: true };
+      }
+
+      const xpByStat = {
+        ...state.today.xpEarnedByStatToday,
+        [ph.stat]: (state.today.xpEarnedByStatToday[ph.stat] || 0) + xpGained,
+      };
+
+      // Streak milestone check
+      const newStreak = ph.streak; // not advanced yet — happens on ADVANCE_DAY
+      const notifications = [...state.notifications];
+
+      // Check per-habit streak milestone (based on actual consecutive completions)
+      const completedSoFar = state.today.completedHabitIds.length + 1;
+
+      const newState = {
+        ...state,
+        stats: updatedStats,
+        today: {
+          ...state.today,
+          completedHabitIds: [...state.today.completedHabitIds, habitId],
+          xpEarnedByStatToday: xpByStat,
+          totalXpToday: state.today.totalXpToday + xpGained,
+        },
+        notifications,
+        _lastXpGain: { habitId, xpGained, stat: ph.stat, leveled, levelUps },
+      };
+
+      // Check titles
+      const newTitles = checkTitles(newState);
+      if (newTitles.length > 0) {
+        return {
+          ...newState,
+          player: {
+            ...newState.player,
+            titles: [...newState.player.titles, ...newTitles],
+          },
+        };
+      }
+      return newState;
+    }
+
+    case "END_DAY": {
+      const total = state.playerHabits.length;
+      const done = state.today.completedHabitIds.length;
+      const pct = total > 0 ? done / total : 0;
+      const coach = pickCoach(pct, state.player.dayCount);
+      return {
+        ...state,
+        today: { ...state.today, dayEnded: true, coachMessage: coach },
+      };
+    }
+
+    case "ACCEPT_UPGRADE": {
+      const { habitId } = action;
+      const ph = state.playerHabits.find(h => h.id === habitId);
+      if (!ph) return state;
+      const lib = HABIT_LIBRARY.find(h => h.id === ph.libraryId);
+      const updatedHabits = state.playerHabits.map(h =>
+        h.id === habitId
+          ? { ...h, name: lib.unlock, isUpgraded: true, status: "upgraded" }
+          : h
+      );
+      const notifications = state.notifications.map(n =>
+        n.type === "upgrade_offer" && n.habitId === habitId ? { ...n, seen: true } : n
+      );
+      return { ...state, playerHabits: updatedHabits, notifications };
+    }
+
+    case "DISMISS_UPGRADE": {
+      const { habitId } = action;
+      const notifications = state.notifications.map(n =>
+        n.type === "upgrade_offer" && n.habitId === habitId ? { ...n, seen: true } : n
+      );
+      return { ...state, notifications };
+    }
+
+    case "UNLOCK_NEW_HABIT": {
+      const { libraryId } = action;
+      const lib = HABIT_LIBRARY.find(h => h.id === libraryId);
+      if (!lib) return state;
+      const existingIds = state.playerHabits.map(h => h.libraryId);
+      if (existingIds.includes(libraryId)) return state;
+      const newHabit = {
+        id: `ph_${String(state.playerHabits.length + 1).padStart(3, "0")}`,
+        libraryId: lib.id,
+        name: lib.name,
+        stat: lib.stat,
+        xpReward: lib.xpReward,
+        streak: 0,
+        streakFrozen: false,
+        streakBroken: false,
+        lastCompleted: null,
+        daysActive: 0,
+        status: "active",
+        isUpgraded: false,
+        upgradeOfferedAt: null,
+        automatedAt: null,
+      };
+      return { ...state, playerHabits: [...state.playerHabits, newHabit] };
+    }
+
+    case "MARK_NOTIFICATION_SEEN": {
+      return {
+        ...state,
+        notifications: state.notifications.map(n =>
+          n.id === action.notifId ? { ...n, seen: true } : n
+        ),
+      };
+    }
+
+    case "SET_ACTIVE_TITLE": {
+      return { ...state, player: { ...state.player, activeTitle: action.titleId } };
+    }
+
+    case "CLEAR_LAST_XP_GAIN": {
+      const { _lastXpGain, ...rest } = state;
+      return rest;
+    }
+
+    default:
+      return state;
+  }
+}

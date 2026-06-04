@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #0a0c14;
+  color: #e2e8f0;
+  font-family: system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+#root {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ─── Animations ──────────────────────────────────────── */
+
+@keyframes floatXP {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  80%  { opacity: 1; transform: translateY(-60px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-80px) scale(0.9); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-5px); }
+  80%       { transform: translateX(5px); }
+}
+
+@keyframes hpDrain {
+  from { width: var(--hp-start); }
+  to   { width: 0%; }
+}
+
+@keyframes xpFill {
+  from { width: var(--xp-start); }
+  to   { width: var(--xp-end); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 6px 1px rgba(13, 148, 136, 0.5); }
+  50%       { box-shadow: 0 0 14px 4px rgba(13, 148, 136, 0.9); }
+}
+
+@keyframes levelUpFlash {
+  0%   { opacity: 0; transform: scale(0.7); }
+  30%  { opacity: 1; transform: scale(1.05); }
+  70%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1); }
+}
+
+@keyframes streakPop {
+  0%   { opacity: 0; transform: translateY(40px) scale(0.8); }
+  20%  { opacity: 1; transform: translateY(0) scale(1.05); }
+  80%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-10px) scale(0.95); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes confettiFall {
+  0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(120px) rotate(720deg); opacity: 0; }
+}
+
+@keyframes flameGlow {
+  0%, 100% { text-shadow: 0 0 4px #f59e0b; }
+  50%       { text-shadow: 0 0 12px #fbbf24, 0 0 20px #f59e0b; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ─── Utility classes ─────────────────────────────────── */
+
+.animate-fadeIn   { animation: fadeIn 0.4s ease forwards; }
+.animate-slideUp  { animation: slideUp 0.5s ease forwards; }
+
+.card-shake { animation: shake 0.4s ease; }
+
+.float-xp {
+  animation: floatXP 0.9s ease forwards;
+  position: absolute;
+  pointer-events: none;
+  font-weight: 700;
+  font-size: 1.1rem;
+  z-index: 50;
+}
+
+.flame-glow { animation: flameGlow 1.5s ease-in-out infinite; }
+
+.xp-bar-fill {
+  transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+.streak-pop {
+  animation: streakPop 2.5s ease forwards;
+}
+
+.level-up-flash {
+  animation: levelUpFlash 1.2s ease forwards;
+}
+
+/* Scrollable content area above bottom nav */
+.scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Bottom nav */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  z-index: 40;
+}
+
+/* Defeated card */
+.defeated-card {
+  opacity: 0.4;
+  filter: grayscale(0.8);
+  transition: opacity 0.5s ease, filter 0.5s ease;
+}
+
+/* Stat color borders */
+.border-vitality  { border-color: #ef4444; }
+.border-focus     { border-color: #3b82f6; }
+.border-will      { border-color: #f59e0b; }
+.border-output    { border-color: #8b5cf6; }
+.border-presence  { border-color: #ec4899; }
+.border-wisdom    { border-color: #10b981; }
+
+.bg-vitality  { background-color: #ef4444; }
+.bg-focus     { background-color: #3b82f6; }
+.bg-will      { background-color: #f59e0b; }
+.bg-output    { background-color: #8b5cf6; }
+.bg-presence  { background-color: #ec4899; }
+.bg-wisdom    { background-color: #10b981; }
+
+.text-vitality  { color: #ef4444; }
+.text-focus     { color: #3b82f6; }
+.text-will      { color: #f59e0b; }
+.text-output    { color: #8b5cf6; }
+.text-presence  { color: #ec4899; }
+.text-wisdom    { color: #10b981; }
+
+/* Confetti pieces */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+.confetti-piece {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confettiFall 1.2s ease forwards;
+}
