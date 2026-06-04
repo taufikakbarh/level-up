@@ -22,7 +22,8 @@ function saveState(state) {
   } catch {}
 }
 
-export function GameProvider({ children }) {
+// session prop is accepted now — will be used in Task 3 for Supabase sync
+export function GameProvider({ children, session }) {
   const saved = loadState();
   const isInitialized = !!localStorage.getItem(INIT_FLAG);
 
