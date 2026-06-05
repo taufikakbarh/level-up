@@ -1,93 +1,172 @@
-import { createContext, useContext, useReducer, useEffect, useCallback } from "react";
+import { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from "react";
 import { gameReducer, makeInitialState } from "../reducers/gameReducer";
-import { STARTER_HABIT_IDS } from "../constants/habitLibrary";
+import { STARTER_HABIT_IDS, HABIT_LIBRARY } from "../constants/habitLibrary";
+import { loadPlayerState, initPlayer, syncAction } from "../lib/db";
 
 const STORAGE_KEY = "levelup_v1_state";
 const INIT_FLAG   = "levelup_initialized";
 
 const GameContext = createContext(null);
 
-function loadState() {
+// ── localStorage helpers (anonymous / offline fallback) ─────────
+
+function loadLocalState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-function saveState(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {}
+function saveLocalState(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
 }
 
-// session prop is accepted now — will be used in Task 3 for Supabase sync
+// ── Provider ────────────────────────────────────────────────────
+
 export function GameProvider({ children, session }) {
-  const saved = loadState();
-  const isInitialized = !!localStorage.getItem(INIT_FLAG);
+  const userId  = session?.user?.id ?? null;
+  const isAuth  = !!userId;
 
+  // While loading from Supabase we show a spinner
+  const [dbLoading, setDbLoading] = useState(isAuth);
+
+  // Stable ref so syncAction always sees the latest previous state
+  const prevStateRef = useRef(null);
+
+  // ── Initialise reducer ───────────────────────────────────────
+  // Start from localStorage (instant); will be replaced by Supabase data
+  const saved = loadLocalState();
   const [state, dispatch] = useReducer(
     gameReducer,
     saved ?? makeInitialState("Player", STARTER_HABIT_IDS)
   );
 
-  // Persist on every change
+  // ── Load from Supabase when authenticated ────────────────────
   useEffect(() => {
-    saveState(state);
+    if (!isAuth) {
+      setDbLoading(false);
+      return;
+    }
+
+    setDbLoading(true);
+    loadPlayerState(userId).then(remote => {
+      if (remote) {
+        // Replace local state with authoritative Supabase state
+        dispatch({ type: "_HYDRATE", payload: remote });
+      }
+      // If no remote state yet, keep local (user just signed up, initPlayer
+      // will be called from AuthScreen → onAuthSuccess)
+      setDbLoading(false);
+    });
+  }, [userId]);
+
+  // ── Persist: localStorage always + Supabase when logged in ───
+  useEffect(() => {
+    saveLocalState(state);
   }, [state]);
 
-  // Advance day on load if date has changed
+  // ── Advance day on mount ─────────────────────────────────────
   useEffect(() => {
-    if (isInitialized) {
+    if (!dbLoading && localStorage.getItem(INIT_FLAG)) {
       dispatch({ type: "ADVANCE_DAY" });
     }
-  }, []);
+  }, [dbLoading]);
+
+  // ── Wrapped dispatch: sync to Supabase after every action ────
+  const dispatchAndSync = useCallback((action) => {
+    if (action.type === "_HYDRATE") {
+      dispatch(action);
+      return;
+    }
+    const prev = prevStateRef.current ?? state;
+    dispatch(action);
+    // After dispatch React queues a re-render — we read new state in the
+    // next effect. We use a small trick: schedule the sync in a microtask
+    // so it runs after the reducer has produced the new state.
+    setTimeout(() => {
+      // `state` here is stale — we'll compare in the effect below.
+    }, 0);
+    // Store action + prev for the sync effect
+    pendingActionRef.current = { action, prev };
+  }, [state]);
+
+  const pendingActionRef = useRef(null);
+
+  // ── Sync effect: runs after state has been updated ───────────
+  useEffect(() => {
+    if (!isAuth) return;
+    if (!pendingActionRef.current) return;
+    const { action, prev } = pendingActionRef.current;
+    pendingActionRef.current = null;
+    prevStateRef.current = state;
+    syncAction(action, state, prev, userId).catch(err =>
+      console.warn("Supabase sync error:", err)
+    );
+  }, [state]);
+
+  // ── Public actions ───────────────────────────────────────────
 
   const completeHabit = useCallback((habitId) => {
-    dispatch({ type: "COMPLETE_HABIT", habitId });
-  }, []);
+    dispatchAndSync({ type: "COMPLETE_HABIT", habitId });
+  }, [dispatchAndSync]);
 
   const endDay = useCallback(() => {
-    dispatch({ type: "END_DAY" });
-  }, []);
+    dispatchAndSync({ type: "END_DAY" });
+  }, [dispatchAndSync]);
 
   const acceptUpgrade = useCallback((habitId) => {
-    dispatch({ type: "ACCEPT_UPGRADE", habitId });
-  }, []);
+    dispatchAndSync({ type: "ACCEPT_UPGRADE", habitId });
+  }, [dispatchAndSync]);
 
   const dismissUpgrade = useCallback((habitId) => {
-    dispatch({ type: "DISMISS_UPGRADE", habitId });
-  }, []);
+    dispatchAndSync({ type: "DISMISS_UPGRADE", habitId });
+  }, [dispatchAndSync]);
 
   const unlockNewHabit = useCallback((libraryId) => {
-    dispatch({ type: "UNLOCK_NEW_HABIT", libraryId });
-  }, []);
+    dispatchAndSync({ type: "UNLOCK_NEW_HABIT", libraryId });
+  }, [dispatchAndSync]);
 
   const markNotifSeen = useCallback((notifId) => {
-    dispatch({ type: "MARK_NOTIFICATION_SEEN", notifId });
-  }, []);
+    dispatchAndSync({ type: "MARK_NOTIFICATION_SEEN", notifId });
+  }, [dispatchAndSync]);
 
   const setActiveTitle = useCallback((titleId) => {
-    dispatch({ type: "SET_ACTIVE_TITLE", titleId });
-  }, []);
+    dispatchAndSync({ type: "SET_ACTIVE_TITLE", titleId });
+  }, [dispatchAndSync]);
 
   const clearLastXpGain = useCallback(() => {
     dispatch({ type: "CLEAR_LAST_XP_GAIN" });
   }, []);
 
-  const initializePlayer = useCallback((name) => {
-    const fresh = makeInitialState(name, STARTER_HABIT_IDS);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
-    localStorage.setItem(INIT_FLAG, "1");
-    // Force reload with new state — simplest way to reset reducer
-    window.location.reload();
-  }, []);
+  // ── Initialize a new player (called after onboarding + auth) ──
+  const initializePlayer = useCallback(async (name) => {
+    if (isAuth) {
+      // Create rows in Supabase
+      const ok = await initPlayer(userId, name, STARTER_HABIT_IDS, HABIT_LIBRARY);
+      if (ok) {
+        // Load the freshly-created state from Supabase
+        const remote = await loadPlayerState(userId);
+        if (remote) {
+          dispatch({ type: "_HYDRATE", payload: remote });
+        }
+        localStorage.setItem(INIT_FLAG, "1");
+      }
+    } else {
+      // Offline / anonymous fallback
+      const fresh = makeInitialState(name, STARTER_HABIT_IDS);
+      saveLocalState(fresh);
+      localStorage.setItem(INIT_FLAG, "1");
+      window.location.reload();
+    }
+  }, [isAuth, userId]);
+
+  const isInitialized = !!localStorage.getItem(INIT_FLAG);
 
   return (
     <GameContext.Provider value={{
       state,
-      dispatch,
+      dispatch: dispatchAndSync,
+      dbLoading,
       completeHabit,
       endDay,
       acceptUpgrade,
@@ -98,6 +177,7 @@ export function GameProvider({ children, session }) {
       clearLastXpGain,
       initializePlayer,
       isInitialized,
+      isAuth,
     }}>
       {children}
     </GameContext.Provider>

@@ -10,8 +10,8 @@ import CharacterScreen from "./components/screens/CharacterScreen";
 import JournalScreen from "./components/screens/JournalScreen";
 import CodexScreen from "./components/screens/CodexScreen";
 
-// ── Loading spinner ────────────────────────────────────────────
-function LoadingScreen() {
+// ── Spinner ────────────────────────────────────────────────────
+function LoadingScreen({ message = "Loading…" }) {
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center gap-4"
@@ -19,53 +19,21 @@ function LoadingScreen() {
     >
       <div className="text-4xl">⚔️</div>
       <div
-        className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-        style={{ borderColor: "#f5c842", borderTopColor: "transparent" }}
+        className="w-8 h-8 rounded-full border-2 animate-spin"
+        style={{ borderColor: "#f5c84244", borderTopColor: "#f5c842" }}
       />
+      <p className="text-xs text-gray-600 uppercase tracking-widest font-bold">
+        {message}
+      </p>
     </div>
   );
 }
 
-// ── Inner app — only rendered when session exists ──────────────
-function AppInner() {
-  const { state, initializePlayer, isInitialized } = useGame();
-  const { session } = useAuth();
-  const [activeTab, setActiveTab]       = useState("quest");
-  const [showAuth, setShowAuth]         = useState(false);
-  const [pendingName, setPendingName]   = useState("");
-
+// ── Main game UI ───────────────────────────────────────────────
+function GameUI() {
+  const [activeTab, setActiveTab] = useState("quest");
+  const { state } = useGame();
   const pendingNotifs = state.notifications.filter(n => !n.seen).length;
-
-  // ── Onboarding: user just entered name + clicked "Enter the game"
-  // We show AuthScreen before finalizing player state
-  function handleOnboardingComplete(name) {
-    setPendingName(name);
-    setShowAuth(true);
-  }
-
-  // ── Auth done → initialize player with the name they entered
-  // (for returning users this won't fire — isInitialized is true already)
-  function handleAuthBack() {
-    setShowAuth(false);
-  }
-
-  // Not yet gone through onboarding
-  if (!isInitialized && !showAuth) {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
-  }
-
-  // Onboarding done, now showing auth
-  if (showAuth && !isInitialized) {
-    return (
-      <AuthScreen
-        playerName={pendingName}
-        onBack={handleAuthBack}
-        onAuthSuccess={() => {
-          initializePlayer(pendingName);
-        }}
-      />
-    );
-  }
 
   return (
     <div className="flex flex-col flex-1 relative" style={{ minHeight: "100svh" }}>
@@ -84,14 +52,57 @@ function AppInner() {
   );
 }
 
-// ── Auth gate — decides what to render based on session state ──
+// ── Inner app — handles onboarding / auth / game routing ───────
+function AppInner() {
+  const { session } = useAuth();
+  const { isInitialized, dbLoading, initializePlayer } = useGame();
+
+  const [showAuth, setShowAuth]       = useState(false);
+  const [pendingName, setPendingName] = useState("");
+  const [initializing, setInit]       = useState(false);
+
+  // Still fetching Supabase state
+  if (dbLoading) return <LoadingScreen message="Syncing your progress…" />;
+
+  // Saving new player to Supabase
+  if (initializing) return <LoadingScreen message="Creating your character…" />;
+
+  // ── Onboarding: user hasn't played before ──────────────────
+  if (!isInitialized && !showAuth) {
+    return (
+      <Onboarding
+        onComplete={(name) => {
+          setPendingName(name);
+          setShowAuth(true);
+        }}
+      />
+    );
+  }
+
+  // ── Auth: user finished onboarding, now needs to sign in ───
+  if (!isInitialized && showAuth) {
+    return (
+      <AuthScreen
+        playerName={pendingName}
+        onBack={() => setShowAuth(false)}
+        onAuthSuccess={async () => {
+          setShowAuth(false);
+          setInit(true);
+          await initializePlayer(pendingName);
+          setInit(false);
+        }}
+      />
+    );
+  }
+
+  // ── Fully initialized — show the game ──────────────────────
+  return <GameUI />;
+}
+
+// ── Auth gate ──────────────────────────────────────────────────
 function AuthGate() {
   const { session, loading } = useAuth();
-
-  if (loading) return <LoadingScreen />;
-
-  // No session yet → still show onboarding/auth flow
-  // GameProvider handles its own localStorage fallback
+  if (loading) return <LoadingScreen message="Connecting…" />;
   return (
     <GameProvider session={session}>
       <AppInner />

@@ -429,6 +429,11 @@ export function gameReducer(state, action) {
       return rest;
     }
 
+    // Replaces full state with authoritative data from Supabase
+    case "_HYDRATE": {
+      return { ...action.payload };
+    }
+
     default:
       return state;
   }
