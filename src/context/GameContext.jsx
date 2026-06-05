@@ -65,28 +65,6 @@ export function GameProvider({ children, session }) {
     saveLocalState(state);
   }, [state]);
 
-  // ── Advance day on mount + whenever app comes back into view ──
-  // ADVANCE_DAY is a no-op if state.today.date already matches today
-  useEffect(() => {
-    if (dbLoading || !localStorage.getItem(INIT_FLAG)) return;
-
-    function tryAdvance() {
-      if (document.visibilityState === "visible") {
-        dispatch({ type: "ADVANCE_DAY" });
-      }
-    }
-
-    // Fire on mount
-    dispatch({ type: "ADVANCE_DAY" });
-
-    // Fire when user returns to the tab / unlocks phone / switches back
-    document.addEventListener("visibilitychange", tryAdvance);
-
-    return () => {
-      document.removeEventListener("visibilitychange", tryAdvance);
-    };
-  }, [dbLoading]);
-
   // ── Wrapped dispatch: sync to Supabase after every action ────
   const dispatchAndSync = useCallback((action) => {
     if (action.type === "_HYDRATE") {
@@ -106,6 +84,27 @@ export function GameProvider({ children, session }) {
   }, [state]);
 
   const pendingActionRef = useRef(null);
+
+  // Keep a stable ref to dispatchAndSync so the advance-day effect
+  // can call it without being in its dependency array
+  const dispatchAndSyncRef = useRef(dispatchAndSync);
+  useEffect(() => { dispatchAndSyncRef.current = dispatchAndSync; }, [dispatchAndSync]);
+
+  // ── Advance day on mount + whenever app comes back into view ──
+  // Uses dispatchAndSync so ADVANCE_DAY is synced to Supabase
+  useEffect(() => {
+    if (dbLoading || !localStorage.getItem(INIT_FLAG)) return;
+
+    function tryAdvance() {
+      if (document.visibilityState === "visible") {
+        dispatchAndSyncRef.current({ type: "ADVANCE_DAY" });
+      }
+    }
+
+    dispatchAndSyncRef.current({ type: "ADVANCE_DAY" });
+    document.addEventListener("visibilitychange", tryAdvance);
+    return () => document.removeEventListener("visibilitychange", tryAdvance);
+  }, [dbLoading]);
 
   // ── Sync effect: runs after state has been updated ───────────
   useEffect(() => {
