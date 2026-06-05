@@ -3,27 +3,19 @@ import { Mail, ArrowLeft, Loader } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const MODES = {
-  CHOICE:   "choice",   // pick magic link or google
-  EMAIL:    "email",    // enter email
-  SENT:     "sent",     // "check your inbox"
-  ERROR:    "error",    // something went wrong
+  CHOICE: "choice",
+  EMAIL:  "email",
+  SENT:   "sent",
+  ERROR:  "error",
 };
 
-export default function AuthScreen({ playerName, onBack, onAuthSuccess }) {
-  const { signInWithMagicLink, signInWithGoogle, session } = useAuth();
-
-  // When session arrives (magic link redirect or Google), fire callback
-  // useEffect-equivalent: watch session changes
-  if (session && onAuthSuccess) {
-    onAuthSuccess();
-    return null;
-  }
+export default function AuthScreen() {
+  const { signInWithMagicLink, signInWithGoogle } = useAuth();
   const [mode, setMode]       = useState(MODES.CHOICE);
   const [email, setEmail]     = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
 
-  // ── Magic link submit ──────────────────────────────────────
   async function handleMagicLink(e) {
     e.preventDefault();
     if (!email.trim()) return;
@@ -31,19 +23,13 @@ export default function AuthScreen({ playerName, onBack, onAuthSuccess }) {
     setError("");
     const { error } = await signInWithMagicLink(email.trim());
     setLoading(false);
-    if (error) {
-      setError(error.message);
-      setMode(MODES.ERROR);
-    } else {
-      setMode(MODES.SENT);
-    }
+    if (error) { setError(error.message); setMode(MODES.ERROR); }
+    else        { setMode(MODES.SENT); }
   }
 
-  // ── Google OAuth ───────────────────────────────────────────
   async function handleGoogle() {
     setLoading(true);
     const { error } = await signInWithGoogle();
-    // If error, Google popup was blocked or something failed
     if (error) {
       setLoading(false);
       setError(error.message);
@@ -59,88 +45,70 @@ export default function AuthScreen({ playerName, onBack, onAuthSuccess }) {
     >
       <div className="w-full max-w-sm px-6">
 
-        {/* ── Back button ──────────────────────────────────── */}
-        {mode !== MODES.SENT && onBack && (
+        {/* Back to email choice */}
+        {mode === MODES.EMAIL && (
           <button
-            onClick={onBack}
+            onClick={() => setMode(MODES.CHOICE)}
             className="flex items-center gap-1 text-gray-600 text-sm mb-8 hover:text-gray-400 transition-colors"
           >
-            <ArrowLeft size={14} />
-            Back
+            <ArrowLeft size={14} /> Back
           </button>
         )}
 
-        {/* ── Choice screen ────────────────────────────────── */}
+        {/* ── CHOICE ─────────────────────────────────────── */}
         {mode === MODES.CHOICE && (
           <div className="animate-fadeIn">
-            <div className="text-center mb-8">
-              <div className="text-4xl mb-4">🔐</div>
-              <h1 className="text-white font-black text-2xl mb-2">
-                Save your progress
-              </h1>
-              <p className="text-gray-500 text-sm">
-                {playerName
-                  ? `Link an account to keep ${playerName}'s journey safe.`
-                  : "Link an account so your streak is never lost."}
+            <div className="text-center mb-10">
+              <div
+                className="font-black text-5xl mb-3 tracking-wide"
+                style={{ color: "#f5c842", textShadow: "0 0 30px #f5c84266" }}
+              >
+                LEVEL UP
+              </div>
+              <p className="text-gray-500 text-sm italic">
+                Every legend started at Level 1.
               </p>
             </div>
 
-            {/* Google */}
             <button
               onClick={handleGoogle}
               disabled={loading}
               className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-sm tracking-wide mb-3 transition-all active:scale-95 disabled:opacity-50"
-              style={{
-                background: "#fff",
-                color: "#1a1a1a",
-                boxShadow: "0 0 20px rgba(255,255,255,0.05)",
-              }}
+              style={{ background: "#fff", color: "#1a1a1a" }}
             >
-              {loading ? (
-                <Loader size={18} className="animate-spin" />
-              ) : (
-                <>
-                  <GoogleIcon />
-                  Continue with Google
-                </>
-              )}
+              {loading
+                ? <Loader size={18} className="animate-spin" />
+                : <><GoogleIcon /> Continue with Google</>
+              }
             </button>
 
-            {/* Divider */}
             <div className="flex items-center gap-3 my-4">
               <div className="flex-1 h-px" style={{ background: "#1f2335" }} />
               <span className="text-xs text-gray-600 uppercase tracking-widest font-bold">or</span>
               <div className="flex-1 h-px" style={{ background: "#1f2335" }} />
             </div>
 
-            {/* Magic link */}
             <button
               onClick={() => setMode(MODES.EMAIL)}
               className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-sm tracking-wide transition-all active:scale-95"
-              style={{
-                background: "#12151f",
-                color: "#e2e8f0",
-                border: "1px solid #1f2335",
-              }}
+              style={{ background: "#12151f", color: "#e2e8f0", border: "1px solid #1f2335" }}
             >
-              <Mail size={18} className="text-gold" />
+              <Mail size={18} style={{ color: "#f5c842" }} />
               Continue with Email
             </button>
 
             <p className="text-center text-xs text-gray-600 mt-6 leading-relaxed">
-              No password needed. We'll send a magic link to your inbox.
+              New or returning — same button. We'll handle it.
             </p>
           </div>
         )}
 
-        {/* ── Email form ───────────────────────────────────── */}
+        {/* ── EMAIL ──────────────────────────────────────── */}
         {mode === MODES.EMAIL && (
           <form onSubmit={handleMagicLink} className="animate-fadeIn">
             <div className="text-center mb-8">
               <div className="text-4xl mb-4">✉️</div>
-              <h1 className="text-white font-black text-2xl mb-2">
-                Enter your email
-              </h1>
+              <h1 className="text-white font-black text-2xl mb-2">Enter your email</h1>
               <p className="text-gray-500 text-sm">
                 We'll send a magic link — no password ever.
               </p>
@@ -165,21 +133,14 @@ export default function AuthScreen({ playerName, onBack, onAuthSuccess }) {
               type="submit"
               disabled={loading || !email.trim()}
               className="w-full py-4 rounded-2xl font-black text-base tracking-widest uppercase transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2"
-              style={{
-                background: "linear-gradient(135deg, #f5c842, #d97706)",
-                color: "#0a0c14",
-              }}
+              style={{ background: "linear-gradient(135deg, #f5c842, #d97706)", color: "#0a0c14" }}
             >
-              {loading ? (
-                <Loader size={18} className="animate-spin" />
-              ) : (
-                "Send magic link"
-              )}
+              {loading ? <Loader size={18} className="animate-spin" /> : "Send magic link"}
             </button>
           </form>
         )}
 
-        {/* ── Sent screen ──────────────────────────────────── */}
+        {/* ── SENT ───────────────────────────────────────── */}
         {mode === MODES.SENT && (
           <div className="text-center animate-fadeIn">
             <div
@@ -192,18 +153,11 @@ export default function AuthScreen({ playerName, onBack, onAuthSuccess }) {
             >
               📬
             </div>
-            <h1 className="text-white font-black text-2xl mb-3">
-              Check your inbox
-            </h1>
-            <p className="text-gray-400 text-sm mb-2 leading-relaxed">
-              We sent a magic link to
-            </p>
-            <p className="font-bold text-sm mb-6" style={{ color: "#f5c842" }}>
-              {email}
-            </p>
+            <h1 className="text-white font-black text-2xl mb-3">Check your inbox</h1>
+            <p className="text-gray-400 text-sm mb-2">We sent a magic link to</p>
+            <p className="font-bold text-sm mb-6" style={{ color: "#f5c842" }}>{email}</p>
             <p className="text-gray-600 text-xs leading-relaxed mb-8">
-              Click the link in the email to sign in. You can close this tab.
-              The link expires in 1 hour.
+              Click the link in the email to sign in. The link expires in 1 hour.
             </p>
             <button
               onClick={() => { setMode(MODES.EMAIL); setEmail(""); }}
@@ -214,34 +168,29 @@ export default function AuthScreen({ playerName, onBack, onAuthSuccess }) {
           </div>
         )}
 
-        {/* ── Error screen ─────────────────────────────────── */}
+        {/* ── ERROR ──────────────────────────────────────── */}
         {mode === MODES.ERROR && (
           <div className="text-center animate-fadeIn">
             <div className="text-5xl mb-6">⚠️</div>
-            <h1 className="text-white font-black text-xl mb-3">
-              Something went wrong
-            </h1>
+            <h1 className="text-white font-black text-xl mb-3">Something went wrong</h1>
             <p className="text-gray-500 text-sm mb-6 leading-relaxed">
               {error || "An unexpected error occurred. Please try again."}
             </p>
             <button
               onClick={() => { setMode(MODES.CHOICE); setError(""); }}
               className="w-full py-4 rounded-2xl font-black text-base tracking-widest uppercase transition-all active:scale-95"
-              style={{
-                background: "linear-gradient(135deg, #f5c842, #d97706)",
-                color: "#0a0c14",
-              }}
+              style={{ background: "linear-gradient(135deg, #f5c842, #d97706)", color: "#0a0c14" }}
             >
               Try again
             </button>
           </div>
         )}
+
       </div>
     </div>
   );
 }
 
-// ── Inline Google icon (no extra dep) ──────────────────────────
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18">

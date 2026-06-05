@@ -4,8 +4,8 @@ import { supabase } from "../lib/supabase";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [session, setSession]   = useState(undefined); // undefined = loading
-  const [profile, setProfile]   = useState(null);      // players row
+  const [session, setSession]   = useState(undefined);  // undefined = loading
+  const [profile, setProfile]   = useState(undefined);  // undefined = loading, null = no row
 
   // ── Bootstrap session on mount ──────────────────────────────
   useEffect(() => {
@@ -25,15 +25,16 @@ export function AuthProvider({ children }) {
   // ── Load player profile when session is set ─────────────────
   useEffect(() => {
     if (!session?.user?.id) {
-      setProfile(null);
+      setProfile(null);  // no session → definitely no profile
       return;
     }
+    setProfile(undefined); // mark as loading while we fetch
     supabase
       .from("players")
       .select("*")
       .eq("id", session.user.id)
       .single()
-      .then(({ data }) => setProfile(data ?? null));
+      .then(({ data }) => setProfile(data ?? null)); // null = new player
   }, [session]);
 
   // ── Auth helpers ────────────────────────────────────────────
@@ -58,7 +59,8 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }
 
-  const loading = session === undefined;
+  // loading = true while session OR profile is still resolving
+  const loading = session === undefined || (session !== null && profile === undefined);
 
   return (
     <AuthContext.Provider value={{

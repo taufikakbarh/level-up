@@ -2,8 +2,11 @@ import { useState } from "react";
 import "./App.css";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { GameProvider, useGame } from "./context/GameContext";
-import Onboarding from "./components/Onboarding";
+import { initPlayer } from "./lib/db";
+import { supabase } from "./lib/supabase";
+import { STARTER_HABIT_IDS, HABIT_LIBRARY } from "./constants/habitLibrary";
 import AuthScreen from "./components/AuthScreen";
+import Onboarding from "./components/Onboarding";
 import Navigation from "./components/Navigation";
 import QuestScreen from "./components/screens/QuestScreen";
 import CharacterScreen from "./components/screens/CharacterScreen";
@@ -11,7 +14,7 @@ import JournalScreen from "./components/screens/JournalScreen";
 import CodexScreen from "./components/screens/CodexScreen";
 
 // ── Spinner ────────────────────────────────────────────────────
-function LoadingScreen({ message = "Loading…" }) {
+export function LoadingScreen({ message = "Loading…" }) {
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center gap-4"
@@ -29,7 +32,7 @@ function LoadingScreen({ message = "Loading…" }) {
   );
 }
 
-// ── Main game UI ───────────────────────────────────────────────
+// ── Game UI — only shown to initialized players ────────────────
 function GameUI() {
   const [activeTab, setActiveTab] = useState("quest");
   const { state } = useGame();
@@ -52,62 +55,58 @@ function GameUI() {
   );
 }
 
-// ── Inner app — handles onboarding / auth / game routing ───────
-function AppInner() {
-  const { session } = useAuth();
-  const { isInitialized, dbLoading, initializePlayer } = useGame();
+// ── Post-auth onboarding wrapper ───────────────────────────────
+// Shown when user is authenticated but has no player row yet.
+function NewPlayerSetup() {
+  const { session, setProfile } = useAuth();
+  const [loading, setLoading]   = useState(false);
 
-  const [showAuth, setShowAuth]       = useState(false);
-  const [pendingName, setPendingName] = useState("");
-  const [initializing, setInit]       = useState(false);
+  async function handleComplete(name) {
+    setLoading(true);
+    const userId = session.user.id;
 
-  // Still fetching Supabase state
-  if (dbLoading) return <LoadingScreen message="Syncing your progress…" />;
+    // Create player row + habits in Supabase
+    await initPlayer(userId, name, STARTER_HABIT_IDS, HABIT_LIBRARY);
 
-  // Saving new player to Supabase
-  if (initializing) return <LoadingScreen message="Creating your character…" />;
-
-  // ── Onboarding: user hasn't played before ──────────────────
-  if (!isInitialized && !showAuth) {
-    return (
-      <Onboarding
-        onComplete={(name) => {
-          setPendingName(name);
-          setShowAuth(true);
-        }}
-      />
-    );
+    // Load the freshly-created profile to trigger AuthGate → GameUI
+    const { data } = await supabase.from("players").select("*").eq("id", userId).single();
+    setProfile(data);
+    setLoading(false);
   }
 
-  // ── Auth: user finished onboarding, now needs to sign in ───
-  if (!isInitialized && showAuth) {
-    return (
-      <AuthScreen
-        playerName={pendingName}
-        onBack={() => setShowAuth(false)}
-        onAuthSuccess={async () => {
-          setShowAuth(false);
-          setInit(true);
-          await initializePlayer(pendingName);
-          setInit(false);
-        }}
-      />
-    );
-  }
-
-  // ── Fully initialized — show the game ──────────────────────
-  return <GameUI />;
+  return <Onboarding onComplete={handleComplete} loading={loading} />;
 }
 
-// ── Auth gate ──────────────────────────────────────────────────
+// ── Auth gate — single source of routing truth ─────────────────
+//
+//  No session              → AuthScreen  (login / register)
+//  Session + no profile    → NewPlayerSetup (name → stats → habits → enter)
+//  Session + profile exists → GameUI
+//
 function AuthGate() {
-  const { session, loading } = useAuth();
+  const { session, profile, loading } = useAuth();
+
+  // Resolving session + profile
   if (loading) return <LoadingScreen message="Connecting…" />;
+
+  // Not logged in → auth first
+  if (!session) return <AuthScreen />;
+
+  // Logged in, no player row → new player setup
+  if (!profile) return <NewPlayerSetup />;
+
+  // Fully set up → load game state and show game
   return (
     <GameProvider session={session}>
-      <AppInner />
+      <GameWithLoader />
     </GameProvider>
   );
+}
+
+function GameWithLoader() {
+  const { dbLoading } = useGame();
+  if (dbLoading) return <LoadingScreen message="Syncing your progress…" />;
+  return <GameUI />;
 }
 
 // ── Root ───────────────────────────────────────────────────────
