@@ -88,7 +88,12 @@ export function GameProvider({ children, session }) {
   // day-advance result: player row, habit streaks, new daily_log row,
   // notifications and titles. ADVANCE_DAY is a no-op if the date matches.
   useEffect(() => {
-    if (dbLoading || !localStorage.getItem(INIT_FLAG)) return;
+    if (dbLoading) return;
+    // Authenticated users: profile already confirmed by AuthGate, so just
+    // wait for the Supabase load to finish (dbLoading=false). The localStorage
+    // INIT_FLAG only gates the anonymous/offline path — it may be absent on a
+    // new device or after clearing storage even though the player exists.
+    if (!isAuth && !localStorage.getItem(INIT_FLAG)) return;
 
     function tryAdvance() {
       if (document.visibilityState === "visible") {
@@ -99,7 +104,7 @@ export function GameProvider({ children, session }) {
     dispatchAndSyncRef.current({ type: "ADVANCE_DAY" });
     document.addEventListener("visibilitychange", tryAdvance);
     return () => document.removeEventListener("visibilitychange", tryAdvance);
-  }, [dbLoading]);
+  }, [dbLoading, isAuth]);
 
   // ── Sync effect: runs after state updates, flushes the queue ──
   useEffect(() => {
