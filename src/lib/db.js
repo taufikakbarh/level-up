@@ -12,6 +12,14 @@
 
 import { supabase } from "./supabase";
 
+function localDateISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, "0");
+  const dd   = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 // ── Helpers: snake_case ↔ camelCase ────────────────────────────
 
 function rowToStat(row) {
@@ -157,7 +165,7 @@ function rowToNotif(row) {
 // ── Load full player state from all tables ──────────────────────
 
 export async function loadPlayerState(userId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateISO();
 
   const [
     playerRes,
@@ -237,7 +245,7 @@ export async function loadPlayerState(userId) {
 // ── Init a brand-new player (called after first sign-up) ────────
 
 export async function initPlayer(userId, name, starterHabitIds, habitLibrary) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateISO();
 
   // 1. Insert player row — triggers auto-seed of stats, daily_log, title
   const { error: playerErr } = await supabase.from("players").insert({
