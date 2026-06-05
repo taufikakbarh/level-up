@@ -210,42 +210,52 @@ export default function CharacterScreen() {
 
       {/* ── Logout ──────────────────────────────────────────── */}
       <div className="mt-4 mb-6">
-        {!confirmLogout ? (
-          <button
-            onClick={() => setConfirmLogout(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
-            style={{ background: "#12151f", color: "#6b7280", border: "1px solid #1f2335" }}
-          >
-            <LogOut size={15} />
-            Sign out
-          </button>
-        ) : (
+        <button
+          onClick={() => setConfirmLogout(true)}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+          style={{ background: "#12151f", color: "#6b7280", border: "1px solid #1f2335" }}
+        >
+          <LogOut size={15} />
+          Sign out
+        </button>
+      </div>
+
+      {/* ── Sign-out confirmation modal ─────────────────────── */}
+      {confirmLogout && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-6"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={() => setConfirmLogout(false)}
+        >
           <div
-            className="rounded-xl p-4 animate-fadeIn"
-            style={{ background: "#12151f", border: "1px solid rgba(239,68,68,0.25)" }}
+            className="w-full max-w-xs rounded-2xl p-6 animate-fadeIn"
+            style={{ background: "#1a1e2e", border: "1px solid rgba(239,68,68,0.25)", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
+            onClick={e => e.stopPropagation()}
           >
-            <p className="text-sm text-gray-400 text-center mb-3">
-              Are you sure? Your progress is saved to your account.
+            <div className="text-center mb-1 text-3xl">👋</div>
+            <h3 className="text-white font-bold text-center text-base mb-2">Sign out?</h3>
+            <p className="text-sm text-gray-400 text-center mb-5 leading-relaxed">
+              Your progress is safely saved to your account. You can sign back in anytime.
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => setConfirmLogout(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-500 transition-all active:scale-95"
-                style={{ background: "#1a1e2e", border: "1px solid #2a2e40" }}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-400 transition-all active:scale-95"
+                style={{ background: "#12151f", border: "1px solid #2a2e40" }}
               >
                 Cancel
               </button>
               <button
                 onClick={signOut}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
-                style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}
+                className="flex-1 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+                style={{ background: "rgba(239,68,68,0.14)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}
               >
                 Sign out
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
     </div>
   );
