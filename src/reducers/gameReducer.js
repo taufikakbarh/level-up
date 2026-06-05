@@ -56,6 +56,20 @@ function diffDays(a, b) {
   return Math.round((db - da) / 86400000);
 }
 
+// dayCount is DERIVED from joinedDate — never an incrementing counter.
+// This makes it self-healing: even if a stored value drifts, it
+// recomputes correctly on every load. Join day = day 1.
+function computeDayCount(joinedDate, today) {
+  if (!joinedDate) return 1;
+  return Math.max(1, diffDays(joinedDate, today) + 1);
+}
+
+function phaseForDay(dayCount) {
+  if (dayCount >= 66) return 3;
+  if (dayCount >= 30) return 2;
+  return 1;
+}
+
 // ─── Streak multiplier ─────────────────────────────────────────
 
 function streakMultiplier(streak) {
@@ -161,9 +175,27 @@ export function gameReducer(state, action) {
   switch (action.type) {
 
     case "ADVANCE_DAY": {
-      // Called on app open when date has changed
+      // Called on app open / tab focus.
       const today = todayISO();
-      if (state.today.date === today) return state;
+      const correctDayCount = computeDayCount(state.player.joinedDate, today);
+
+      // ── Same calendar day: no rollover, just repair stale fields ──
+      // Fixes data where dayCount drifted out of sync with joinedDate.
+      if (state.today.date === today) {
+        const correctPhase = Math.max(state.player.currentPhase, phaseForDay(correctDayCount));
+        if (correctDayCount === state.player.dayCount &&
+            correctPhase === state.player.currentPhase) {
+          return state; // already correct — true no-op
+        }
+        return {
+          ...state,
+          player: {
+            ...state.player,
+            dayCount: correctDayCount,
+            currentPhase: correctPhase,
+          },
+        };
+      }
 
       // Archive yesterday
       const history = [
@@ -178,7 +210,7 @@ export function gameReducer(state, action) {
       ];
 
       const yesterday = state.today.date;
-      const dayCount = state.player.dayCount + 1;
+      const dayCount = correctDayCount;
 
       // Update per-habit streaks
       let playerHabits = state.playerHabits.map(ph => {
