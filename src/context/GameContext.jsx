@@ -2,6 +2,7 @@ import { createContext, useContext, useReducer, useEffect, useCallback, useRef, 
 import { gameReducer, makeInitialState } from "../reducers/gameReducer";
 import { STARTER_HABIT_IDS, HABIT_LIBRARY } from "../constants/habitLibrary";
 import { loadPlayerState, initPlayer, syncAction } from "../lib/db";
+import { supabase } from "../lib/supabase";
 
 const STORAGE_KEY = "levelup_v1_state";
 const INIT_FLAG   = "levelup_initialized";
@@ -60,12 +61,51 @@ export function GameProvider({ children, session }) {
     });
   }, [userId]);
 
-  // ── Persist: localStorage always + Supabase when logged in ───
+  // ── Persist to localStorage on every state change ────────────
   useEffect(() => {
     saveLocalState(state);
   }, [state]);
 
-  // ── Wrapped dispatch: sync to Supabase after every action ────
+  // ── Advance day on mount + on tab visibility change ───────────
+  useEffect(() => {
+    if (dbLoading || !localStorage.getItem(INIT_FLAG)) return;
+
+    function tryAdvance() {
+      if (document.visibilityState === "visible") {
+        dispatch({ type: "ADVANCE_DAY" });
+      }
+    }
+
+    dispatch({ type: "ADVANCE_DAY" });
+    document.addEventListener("visibilitychange", tryAdvance);
+    return () => document.removeEventListener("visibilitychange", tryAdvance);
+  }, [dbLoading]);
+
+  // ── Directly sync player row whenever day-level fields change ─
+  // Bypasses the pendingActionRef race condition for ADVANCE_DAY.
+  useEffect(() => {
+    if (!isAuth || !localStorage.getItem(INIT_FLAG)) return;
+    if (!state.player?.id) return;
+    supabase.from("players").update({
+      day_count:            state.player.dayCount,
+      current_phase:        state.player.currentPhase,
+      global_streak:        state.player.globalStreak,
+      global_streak_frozen: state.player.globalStreakFrozen,
+      had_comeback:         state.player.hadComeback,
+      active_title:         state.player.activeTitle,
+    }).eq("id", state.player.id)
+      .then(({ error }) => { if (error) console.warn("player sync:", error.message); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    state.player?.dayCount,
+    state.player?.currentPhase,
+    state.player?.globalStreak,
+    state.player?.globalStreakFrozen,
+    state.player?.hadComeback,
+    state.player?.activeTitle,
+  ]);
+
+  // ── Wrapped dispatch: sync non-player actions to Supabase ─────
   const dispatchAndSync = useCallback((action) => {
     if (action.type === "_HYDRATE") {
       dispatch(action);
@@ -73,40 +113,12 @@ export function GameProvider({ children, session }) {
     }
     const prev = prevStateRef.current ?? state;
     dispatch(action);
-    // After dispatch React queues a re-render — we read new state in the
-    // next effect. We use a small trick: schedule the sync in a microtask
-    // so it runs after the reducer has produced the new state.
-    setTimeout(() => {
-      // `state` here is stale — we'll compare in the effect below.
-    }, 0);
-    // Store action + prev for the sync effect
     pendingActionRef.current = { action, prev };
   }, [state]);
 
   const pendingActionRef = useRef(null);
 
-  // Keep a stable ref to dispatchAndSync so the advance-day effect
-  // can call it without being in its dependency array
-  const dispatchAndSyncRef = useRef(dispatchAndSync);
-  useEffect(() => { dispatchAndSyncRef.current = dispatchAndSync; }, [dispatchAndSync]);
-
-  // ── Advance day on mount + whenever app comes back into view ──
-  // Uses dispatchAndSync so ADVANCE_DAY is synced to Supabase
-  useEffect(() => {
-    if (dbLoading || !localStorage.getItem(INIT_FLAG)) return;
-
-    function tryAdvance() {
-      if (document.visibilityState === "visible") {
-        dispatchAndSyncRef.current({ type: "ADVANCE_DAY" });
-      }
-    }
-
-    dispatchAndSyncRef.current({ type: "ADVANCE_DAY" });
-    document.addEventListener("visibilitychange", tryAdvance);
-    return () => document.removeEventListener("visibilitychange", tryAdvance);
-  }, [dbLoading]);
-
-  // ── Sync effect: runs after state has been updated ───────────
+  // ── Sync effect: runs after state updates for all other actions
   useEffect(() => {
     if (!isAuth) return;
     if (!pendingActionRef.current) return;
