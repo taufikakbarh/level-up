@@ -209,8 +209,16 @@ export async function loadPlayerState(userId) {
   const todayRow     = logRows.find(r => r.date === today);
   const historyRows  = logRows.filter(r => r.date !== today);
 
+  // If no daily_log row exists for today, use the most recent log date
+  // (or yesterday) as the fallback — NOT today. If we defaulted to today,
+  // ADVANCE_DAY would see matching dates and skip incrementing dayCount.
+  const lastLogDate = logRows[0]?.date ?? (() => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  })();
+
   const todayState = todayRow ? rowToDaily(todayRow) : {
-    date:                 today,
+    date:                 lastLogDate,
     completedHabitIds:    [],
     xpEarnedByStatToday:  { vitality: 0, focus: 0, will: 0, output: 0, presence: 0, wisdom: 0 },
     totalXpToday:         0,
