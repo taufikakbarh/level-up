@@ -13,7 +13,7 @@ const PHASE_LABELS = {
 };
 
 export default function QuestScreen() {
-  const { state, completeHabit, endDay, acceptUpgrade, dismissUpgrade, markNotifSeen } = useGame();
+  const { state, completeHabit, uncompleteHabit, endDay, acceptUpgrade, dismissUpgrade, markNotifSeen } = useGame();
   const { player, playerHabits, today, stats, notifications, _lastXpGain } = state;
 
   const [showSummary, setShowSummary] = useState(false);
@@ -153,7 +153,9 @@ export default function QuestScreen() {
               habit={habit}
               completed={false}
               onComplete={completeHabit}
+              onUncomplete={uncompleteHabit}
               lastXpGain={_lastXpGain}
+              dayEnded={today.dayEnded}
             />
           ))}
         {/* Defeated */}
@@ -165,7 +167,9 @@ export default function QuestScreen() {
               habit={habit}
               completed={true}
               onComplete={completeHabit}
+              onUncomplete={uncompleteHabit}
               lastXpGain={_lastXpGain}
+              dayEnded={today.dayEnded}
             />
           ))}
       </div>

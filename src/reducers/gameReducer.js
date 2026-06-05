@@ -22,6 +22,23 @@ function applyXpToStat(stat, xpGain) {
   return { level, xp, totalXp, keystoneBonus: stat.keystoneBonus, leveled, levelUps };
 }
 
+function removeXpFromStat(stat, xpLoss) {
+  let { level, xp, totalXp, keystoneBonus } = stat;
+  xp        -= xpLoss;
+  totalXp   = Math.max(0, totalXp - xpLoss);
+  // Level-down if XP goes negative
+  while (xp < 0 && level > 1) {
+    level -= 1;
+    xp    += xpForLevel(level);
+  }
+  xp = Math.max(0, xp);
+  return { level, xp, totalXp, keystoneBonus };
+}
+
+function calcXpGain(habit, streakMultiplier, keystoneBonus) {
+  return Math.round(habit.xpReward * streakMultiplier * (keystoneBonus ? 1.2 : 1));
+}
+
 // ─── Date helpers ──────────────────────────────────────────────
 
 function todayISO() {
@@ -349,6 +366,41 @@ export function gameReducer(state, action) {
         };
       }
       return newState;
+    }
+
+    case "UNCOMPLETE_HABIT": {
+      const { habitId } = action;
+      if (!state.today.completedHabitIds.includes(habitId)) return state;
+      if (state.today.dayEnded) return state; // can't undo after day is ended
+
+      const ph  = state.playerHabits.find(h => h.id === habitId);
+      if (!ph) return state;
+
+      const keystoneBonus = state.stats[ph.stat]?.keystoneBonus ?? false;
+      const xpToRemove    = calcXpGain(ph, state.today.streakMultiplier, keystoneBonus);
+
+      // Reverse stat XP
+      const statBefore = state.stats[ph.stat];
+      const statAfter  = removeXpFromStat(statBefore, xpToRemove);
+
+      const newStats = { ...state.stats, [ph.stat]: statAfter };
+
+      // Reverse today's XP tracking
+      const xpByStat = {
+        ...state.today.xpEarnedByStatToday,
+        [ph.stat]: Math.max(0, (state.today.xpEarnedByStatToday[ph.stat] ?? 0) - xpToRemove),
+      };
+
+      return {
+        ...state,
+        stats: newStats,
+        today: {
+          ...state.today,
+          completedHabitIds: state.today.completedHabitIds.filter(id => id !== habitId),
+          xpEarnedByStatToday: xpByStat,
+          totalXpToday: Math.max(0, state.today.totalXpToday - xpToRemove),
+        },
+      };
     }
 
     case "END_DAY": {

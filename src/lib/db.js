@@ -311,6 +311,22 @@ export async function syncAction(action, newState, prevState, userId) {
       break;
     }
 
+    case "UNCOMPLETE_HABIT": {
+      const { habitId } = action;
+      const statKey = newState.playerHabits.find(h => h.id === habitId)?.stat;
+      if (statKey) {
+        await supabase.from("stats").upsert(
+          statToRow(userId, statKey, newState.stats[statKey]),
+          { onConflict: "player_id,stat" }
+        );
+      }
+      await supabase.from("daily_log").upsert(
+        todayToRow(userId, newState.today),
+        { onConflict: "player_id,date" }
+      );
+      break;
+    }
+
     case "END_DAY": {
       await supabase.from("daily_log").upsert(
         todayToRow(userId, newState.today),

@@ -110,6 +110,10 @@ export function GameProvider({ children, session }) {
     dispatchAndSync({ type: "COMPLETE_HABIT", habitId });
   }, [dispatchAndSync]);
 
+  const uncompleteHabit = useCallback((habitId) => {
+    dispatchAndSync({ type: "UNCOMPLETE_HABIT", habitId });
+  }, [dispatchAndSync]);
+
   const endDay = useCallback(() => {
     dispatchAndSync({ type: "END_DAY" });
   }, [dispatchAndSync]);
@@ -168,6 +172,7 @@ export function GameProvider({ children, session }) {
       dispatch: dispatchAndSync,
       dbLoading,
       completeHabit,
+      uncompleteHabit,
       endDay,
       acceptUpgrade,
       dismissUpgrade,

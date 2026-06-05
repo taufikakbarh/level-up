@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { RotateCcw } from "lucide-react";
 import { STAT_META, STREAK_MILESTONES, HABIT_LIBRARY } from "../constants/habitLibrary";
 import FloatingXP from "./ui/FloatingXP";
 import StreakPopup from "./ui/StreakPopup";
@@ -14,7 +15,7 @@ function getLibraryCue(libId) {
   return lib?.cue ?? "";
 }
 
-export default function EnemyCard({ habit, completed, onComplete, lastXpGain }) {
+export default function EnemyCard({ habit, completed, onComplete, onUncomplete, lastXpGain, dayEnded }) {
   const [shaking, setShaking]           = useState(false);
   const [showXP, setShowXP]             = useState(false);
   const [streakMilestone, setStreak]    = useState(null);
@@ -157,11 +158,26 @@ export default function EnemyCard({ habit, completed, onComplete, lastXpGain }) 
           </div>
         )}
 
-        {/* ── Defeated bar ──────────────────────────────── */}
+        {/* ── Defeated bar + undo ───────────────────────── */}
         {completed && (
           <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.03)" }} />
             <span className="text-xs font-black text-gray-700 uppercase tracking-widest">DEFEATED</span>
+            {!dayEnded && (
+              <button
+                onClick={e => { e.stopPropagation(); onUncomplete(habit.id); }}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition-all active:scale-95 ml-1"
+                style={{
+                  background: "rgba(239,68,68,0.1)",
+                  color: "#ef4444",
+                  border: "1px solid rgba(239,68,68,0.2)",
+                }}
+                title="Undo"
+              >
+                <RotateCcw size={10} />
+                Undo
+              </button>
+            )}
           </div>
         )}
 
