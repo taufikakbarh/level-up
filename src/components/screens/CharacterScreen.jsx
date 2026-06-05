@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Star, Lock, CheckCircle } from "lucide-react";
+import { Star, Lock, CheckCircle, LogOut } from "lucide-react";
 import { useGame } from "../../context/GameContext";
+import { useAuth } from "../../context/AuthContext";
 import { STAT_META, TITLES, HABIT_LIBRARY } from "../../constants/habitLibrary";
 import { xpForLevel } from "../../reducers/gameReducer";
 import XPBar from "../ui/XPBar";
@@ -9,6 +10,8 @@ const STAT_ORDER = ["vitality", "focus", "will", "output", "presence", "wisdom"]
 
 export default function CharacterScreen() {
   const { state, setActiveTitle } = useGame();
+  const { signOut } = useAuth();
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const { player, stats, playerHabits } = state;
   const [tab, setTab] = useState("stats"); // "stats" | "titles"
 
@@ -204,6 +207,46 @@ export default function CharacterScreen() {
           })}
         </div>
       )}
+
+      {/* ── Logout ──────────────────────────────────────────── */}
+      <div className="mt-4 mb-6">
+        {!confirmLogout ? (
+          <button
+            onClick={() => setConfirmLogout(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+            style={{ background: "#12151f", color: "#6b7280", border: "1px solid #1f2335" }}
+          >
+            <LogOut size={15} />
+            Sign out
+          </button>
+        ) : (
+          <div
+            className="rounded-xl p-4 animate-fadeIn"
+            style={{ background: "#12151f", border: "1px solid rgba(239,68,68,0.25)" }}
+          >
+            <p className="text-sm text-gray-400 text-center mb-3">
+              Are you sure? Your progress is saved to your account.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmLogout(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-500 transition-all active:scale-95"
+                style={{ background: "#1a1e2e", border: "1px solid #2a2e40" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={signOut}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+                style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

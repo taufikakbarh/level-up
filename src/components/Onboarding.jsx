@@ -97,14 +97,14 @@ export default function Onboarding({ onComplete, loading }) {
   // ── Step 2: Starter habits ───────────────────────────────────
   if (step === 2) {
     return (
-      <Screen>
-        <div className="text-center mb-5 animate-fadeIn">
-          <div className="text-4xl mb-3">⚔️</div>
-          <h1 className="text-white font-black text-xl mb-1">Your First Enemies</h1>
+      <Screen scrollable>
+        <div className="text-center mb-7 animate-fadeIn">
+          <div className="text-5xl mb-4">⚔️</div>
+          <h1 className="text-white font-black text-2xl mb-2">Your First Enemies</h1>
           <p className="text-gray-500 text-sm">Chosen by science, not guesswork.</p>
         </div>
 
-        <div className="space-y-2 mb-5 w-full animate-fadeIn">
+        <div className="space-y-2 mb-6 w-full animate-fadeIn">
           {STARTER_HABIT_IDS.map(id => {
             const habit = HABIT_LIBRARY.find(h => h.id === id);
             const meta  = STAT_META[habit.stat];
@@ -129,7 +129,7 @@ export default function Onboarding({ onComplete, loading }) {
 
         {/* Comeback mechanic */}
         <div
-          className="rounded-xl p-4 mb-6 w-full animate-fadeIn"
+          className="rounded-2xl p-5 mb-8 w-full animate-fadeIn"
           style={{ background: "rgba(30,58,95,0.4)", border: "1px solid #2563eb33" }}
         >
           <div className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">
@@ -154,7 +154,21 @@ export default function Onboarding({ onComplete, loading }) {
 }
 
 // ── Shared layout ────────────────────────────────────────────────
-function Screen({ children }) {
+function Screen({ children, scrollable = false }) {
+  if (scrollable) {
+    return (
+      <div
+        className="fixed inset-0 z-50 overflow-y-auto"
+        style={{ background: "#0a0c14" }}
+      >
+        <div className="min-h-full flex flex-col items-center px-6 pt-14 pb-14">
+          <div className="w-full max-w-sm flex flex-col items-center">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6"
@@ -172,7 +186,7 @@ function GoldButton({ children, onClick, disabled }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      className="w-full py-4 rounded-2xl font-black text-base tracking-widest uppercase transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2"
+      className="w-full py-5 px-10 rounded-2xl font-black text-base tracking-widest uppercase transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-3"
       style={{ background: "linear-gradient(135deg, #f5c842, #d97706)", color: "#0a0c14" }}
     >
       {children}
