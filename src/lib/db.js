@@ -368,11 +368,12 @@ export async function syncAction(action, newState, prevState, userId) {
         { onConflict: "player_id,date" }
       );
 
-      // New notifications
+      // New notifications — upsert + ignoreDuplicates so a re-run with a
+      // stale prevState can't throw a primary-key conflict.
       const prevNotifIds = new Set(prevState.notifications.map(n => n.id));
       const newNotifs = newState.notifications.filter(n => !prevNotifIds.has(n.id));
       if (newNotifs.length > 0) {
-        await supabase.from("notifications").insert(
+        await supabase.from("notifications").upsert(
           newNotifs.map(n => ({
             id:        n.id,
             player_id: userId,
@@ -381,16 +382,18 @@ export async function syncAction(action, newState, prevState, userId) {
             message:   n.message,
             seen:      n.seen,
             created_at: n.createdAt,
-          }))
+          })),
+          { onConflict: "id", ignoreDuplicates: true }
         );
       }
 
-      // New titles
+      // New titles — same idempotent upsert on the composite PK
       const prevTitles = new Set(prevState.player.titles);
       const newTitles  = newState.player.titles.filter(t => !prevTitles.has(t));
       if (newTitles.length > 0) {
-        await supabase.from("titles").insert(
-          newTitles.map(title_id => ({ player_id: userId, title_id }))
+        await supabase.from("titles").upsert(
+          newTitles.map(title_id => ({ player_id: userId, title_id })),
+          { onConflict: "player_id,title_id", ignoreDuplicates: true }
         );
       }
       break;
