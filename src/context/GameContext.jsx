@@ -1,10 +1,9 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from "react";
 import { gameReducer, makeInitialState } from "../reducers/gameReducer";
-import { STARTER_HABIT_IDS, HABIT_LIBRARY } from "../constants/habitLibrary";
-import { loadPlayerState, initPlayer, syncAction } from "../lib/db";
+import { STARTER_HABIT_IDS } from "../constants/habitLibrary";
+import { loadPlayerState, syncAction } from "../lib/db";
 
 const STORAGE_KEY = "levelup_v1_state";
-const INIT_FLAG   = "levelup_initialized";
 
 const GameContext = createContext(null);
 
@@ -88,12 +87,9 @@ export function GameProvider({ children, session }) {
   // day-advance result: player row, habit streaks, new daily_log row,
   // notifications and titles. ADVANCE_DAY is a no-op if the date matches.
   useEffect(() => {
+    // Profile is already confirmed by AuthGate before GameProvider mounts,
+    // so we only wait for the Supabase load to finish.
     if (dbLoading) return;
-    // Authenticated users: profile already confirmed by AuthGate, so just
-    // wait for the Supabase load to finish (dbLoading=false). The localStorage
-    // INIT_FLAG only gates the anonymous/offline path — it may be absent on a
-    // new device or after clearing storage even though the player exists.
-    if (!isAuth && !localStorage.getItem(INIT_FLAG)) return;
 
     function tryAdvance() {
       if (document.visibilityState === "visible") {
@@ -104,7 +100,7 @@ export function GameProvider({ children, session }) {
     dispatchAndSyncRef.current({ type: "ADVANCE_DAY" });
     document.addEventListener("visibilitychange", tryAdvance);
     return () => document.removeEventListener("visibilitychange", tryAdvance);
-  }, [dbLoading, isAuth]);
+  }, [dbLoading]);
 
   // ── Sync effect: runs after state updates, flushes the queue ──
   useEffect(() => {
@@ -156,30 +152,6 @@ export function GameProvider({ children, session }) {
     dispatch({ type: "CLEAR_LAST_XP_GAIN" });
   }, []);
 
-  // ── Initialize a new player (called after onboarding + auth) ──
-  const initializePlayer = useCallback(async (name) => {
-    if (isAuth) {
-      // Create rows in Supabase
-      const ok = await initPlayer(userId, name, STARTER_HABIT_IDS, HABIT_LIBRARY);
-      if (ok) {
-        // Load the freshly-created state from Supabase
-        const remote = await loadPlayerState(userId);
-        if (remote) {
-          dispatch({ type: "_HYDRATE", payload: remote });
-        }
-        localStorage.setItem(INIT_FLAG, "1");
-      }
-    } else {
-      // Offline / anonymous fallback
-      const fresh = makeInitialState(name, STARTER_HABIT_IDS);
-      saveLocalState(fresh);
-      localStorage.setItem(INIT_FLAG, "1");
-      window.location.reload();
-    }
-  }, [isAuth, userId]);
-
-  const isInitialized = !!localStorage.getItem(INIT_FLAG);
-
   return (
     <GameContext.Provider value={{
       state,
@@ -194,8 +166,6 @@ export function GameProvider({ children, session }) {
       markNotifSeen,
       setActiveTitle,
       clearLastXpGain,
-      initializePlayer,
-      isInitialized,
       isAuth,
     }}>
       {children}
