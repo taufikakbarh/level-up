@@ -16,6 +16,17 @@ body {
   overscroll-behavior: none;
 }
 
+/* Desktop: subtle grid pattern behind the centered app card */
+@media (min-width: 640px) {
+  body {
+    background-color: #060810;
+    background-image:
+      linear-gradient(rgba(245,200,66,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,200,66,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}
+
 #root {
   width: 100%;
   max-width: 480px;
@@ -24,6 +35,18 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
+  background: #0a0c14;
+}
+
+/* Desktop: subtle glow border on the app card */
+@media (min-width: 640px) {
+  #root {
+    min-height: 100svh;
+    box-shadow:
+      0 0 0 1px rgba(245,200,66,0.07),
+      0 0 60px rgba(245,200,66,0.04),
+      0 0 120px rgba(124,58,237,0.06);
+  }
 }
 
 /* ─── Animations ──────────────────────────────────────── */

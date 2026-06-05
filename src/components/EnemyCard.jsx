@@ -15,35 +15,54 @@ function getLibraryCue(libId) {
   return lib?.cue ?? "";
 }
 
+// Animation timing
+const SHAKE_MS   = 400;
+const DRAIN_MS   = 500;  // HP bar drains over 500ms
+const DEFEAT_MS  = 200;  // brief pause before defeated state shows
+
 export default function EnemyCard({ habit, completed, onComplete, onUncomplete, lastXpGain, dayEnded }) {
-  const [shaking, setShaking]           = useState(false);
-  const [showXP, setShowXP]             = useState(false);
-  const [streakMilestone, setStreak]    = useState(null);
+  // 'idle' | 'shaking' | 'draining' | 'defeated'
+  const [phase, setPhase]           = useState("idle");
+  const [showXP, setShowXP]         = useState(false);
+  const [streakMilestone, setStreak] = useState(null);
 
-  const color = STAT_COLORS[habit.stat] ?? "#ffffff";
-  const meta  = STAT_META[habit.stat];
-
-  // Was this card the one that just fired XP?
-  const isMyXp     = lastXpGain?.habitId === habit.id;
+  const color   = STAT_COLORS[habit.stat] ?? "#ffffff";
+  const meta    = STAT_META[habit.stat];
+  const isMyXp  = lastXpGain?.habitId === habit.id;
   const showLevelUp = isMyXp && lastXpGain?.leveled && lastXpGain?.levelUps?.length > 0;
 
   function handleClick() {
-    if (completed) return;
+    if (completed || phase !== "idle") return;
 
-    setShaking(true);
-    setTimeout(() => setShaking(false), 450);
-    // Brief delay so the shake starts before we show XP
-    setTimeout(() => setShowXP(true), 180);
+    // 1. Shake
+    setPhase("shaking");
 
-    onComplete(habit.id);
+    // 2. Start HP drain after shake
+    setTimeout(() => {
+      setPhase("draining");
+    }, SHAKE_MS);
 
-    // Per-habit streak milestone (habit.streak hasn't advanced yet — will be +1 tomorrow,
-    // but we track today's completion so show milestone at the moment of hitting it)
-    const nextStreak = habit.streak + 1;
-    if (STREAK_MILESTONES.includes(nextStreak)) {
-      setTimeout(() => setStreak(nextStreak), 600);
-    }
+    // 3. Fire XP float mid-drain
+    setTimeout(() => {
+      setShowXP(true);
+    }, SHAKE_MS + DRAIN_MS * 0.4);
+
+    // 4. Award XP + flip to defeated after drain completes
+    setTimeout(() => {
+      onComplete(habit.id);
+      setPhase("defeated");
+
+      // Streak milestone check
+      const nextStreak = habit.streak + 1;
+      if (STREAK_MILESTONES.includes(nextStreak)) {
+        setTimeout(() => setStreak(nextStreak), 300);
+      }
+    }, SHAKE_MS + DRAIN_MS + DEFEAT_MS);
   }
+
+  // Treat the card as visually defeated if prop is true OR local phase is defeated
+  const isDefeated = completed || phase === "defeated";
+  const isDraining = phase === "draining";
 
   return (
     <>
@@ -60,18 +79,17 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
 
       <div
         onClick={handleClick}
-        className={`relative rounded-2xl p-4 mb-3 cursor-pointer select-none transition-transform duration-150
-          ${shaking ? "card-shake" : ""}
-          ${completed ? "defeated-card" : ""}
-          ${!completed ? "active:scale-[0.98]" : ""}
+        className={`relative rounded-2xl p-4 mb-3 select-none transition-all duration-500
+          ${phase === "shaking" ? "card-shake" : ""}
+          ${isDefeated ? "defeated-card" : "cursor-pointer active:scale-[0.98]"}
         `}
         style={{
-          background:  completed ? "#0d0f18" : "#12151f",
-          border:      `2px solid ${completed ? "#1a1e2e" : color}`,
-          boxShadow:   completed ? "none" : `0 0 14px ${color}25, inset 0 0 24px ${color}07`,
+          background:  isDefeated ? "#0d0f18" : "#12151f",
+          border:      `2px solid ${isDefeated ? "#1a1e2e" : color}`,
+          boxShadow:   isDefeated ? "none" : `0 0 14px ${color}25, inset 0 0 24px ${color}07`,
         }}
       >
-        {/* Floating XP — only shown for the card that was just tapped */}
+        {/* Floating XP */}
         {showXP && isMyXp && (
           <FloatingXP
             amount={lastXpGain?.xpGained ?? habit.xpReward}
@@ -80,99 +98,96 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
           />
         )}
 
-        {/* ── Top row: stat label + badges + XP ─────────── */}
+        {/* ── Top row ───────────────────────────────────────── */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0 pr-2">
-            {/* Stat + badges */}
             <div className="flex items-center gap-1.5 mb-1 flex-wrap">
               <span className="text-sm">{meta?.icon}</span>
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color }}>
                 {meta?.label}
               </span>
               {habit.status === "automated" && (
-                <span
-                  className="text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: "#0d9488", color: "#fff" }}
-                >
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: "#0d9488", color: "#fff" }}>
                   ✓ AUTOMATED
                 </span>
               )}
               {habit.isUpgraded && habit.status !== "automated" && (
-                <span
-                  className="text-xs px-2 py-0.5 rounded-full"
-                  style={{ background: "#7c3aed22", color: "#a78bfa", border: "1px solid #7c3aed44" }}
-                >
+                <span className="text-xs px-2 py-0.5 rounded-full"
+                  style={{ background: "#7c3aed22", color: "#a78bfa", border: "1px solid #7c3aed44" }}>
                   ⬆ UPGRADED
                 </span>
               )}
             </div>
-            {/* Habit name */}
             <div className="font-bold text-base leading-snug">
-              {completed
+              {isDefeated
                 ? <span className="text-gray-600 line-through">{habit.name}</span>
                 : <span className="text-white">{habit.name}</span>
               }
             </div>
           </div>
 
-          {/* Right column: XP badge + streak flame */}
           <div className="flex flex-col items-end gap-1 shrink-0">
             <div
               className="text-xs font-bold px-2 py-1 rounded-lg"
               style={{
-                background: completed ? "#1a1e2e" : `${color}22`,
-                color:      completed ? "#374151" : color,
-                border:     `1px solid ${completed ? "#1f2335" : color + "44"}`,
+                background: isDefeated ? "#1a1e2e" : `${color}22`,
+                color:      isDefeated ? "#374151" : color,
+                border:     `1px solid ${isDefeated ? "#1f2335" : color + "44"}`,
               }}
             >
               +{habit.xpReward} XP
             </div>
             {habit.streak > 0 && (
-              <div
-                className={`text-xs font-bold ${habit.streak >= 7 ? "flame-glow" : ""}`}
-                style={{ color: "#f59e0b" }}
-              >
+              <div className={`text-xs font-bold ${habit.streak >= 7 ? "flame-glow" : ""}`}
+                style={{ color: "#f59e0b" }}>
                 🔥 {habit.streak}
               </div>
             )}
           </div>
         </div>
 
-        {/* ── HP bar (active only) ───────────────────────── */}
-        {!completed && (
+        {/* ── HP bar (active + draining) ─────────────────────── */}
+        {!isDefeated && (
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-600 mb-1">
               <span className="font-bold uppercase tracking-wider">HP</span>
-              <span>100%</span>
+              <span>{isDraining ? "0%" : "100%"}</span>
             </div>
-            <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <div className="w-full h-2 rounded-full overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.06)" }}>
               <div
                 className="h-full rounded-full"
                 style={{
-                  width: "100%",
+                  width:      isDraining ? "0%" : "100%",
                   background: color,
-                  boxShadow: `0 0 8px ${color}99`,
+                  boxShadow:  `0 0 8px ${color}99`,
+                  transition: isDraining
+                    ? `width ${DRAIN_MS}ms cubic-bezier(0.4,0,0.2,1)`
+                    : "none",
                 }}
               />
             </div>
           </div>
         )}
 
-        {/* ── Defeated bar + undo ───────────────────────── */}
-        {completed && (
+        {/* ── Defeated row ──────────────────────────────────── */}
+        {isDefeated && (
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.03)" }} />
-            <span className="text-xs font-black text-gray-700 uppercase tracking-widest">DEFEATED</span>
+            <div className="flex-1 h-1.5 rounded-full"
+              style={{ background: "rgba(255,255,255,0.03)" }} />
+            <span className="text-xs font-black text-gray-700 uppercase tracking-widest">
+              DEFEATED
+            </span>
             {!dayEnded && (
               <button
-                onClick={e => { e.stopPropagation(); onUncomplete(habit.id); }}
+                onClick={e => { e.stopPropagation(); onUncomplete(habit.id); setPhase("idle"); }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold transition-all active:scale-95 ml-1"
                 style={{
                   background: "rgba(239,68,68,0.1)",
                   color: "#ef4444",
                   border: "1px solid rgba(239,68,68,0.2)",
                 }}
-                title="Undo"
               >
                 <RotateCcw size={10} />
                 Undo
@@ -181,15 +196,15 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
           </div>
         )}
 
-        {/* ── Cue reminder (active only) ────────────────── */}
-        {!completed && (
+        {/* ── Cue reminder ──────────────────────────────────── */}
+        {!isDefeated && (
           <div className="text-xs text-gray-600 italic mt-2 leading-relaxed">
             📍 {getLibraryCue(habit.libraryId)}
           </div>
         )}
 
-        {/* ── Frozen badge ──────────────────────────────── */}
-        {habit.streakFrozen && !completed && (
+        {/* ── Frozen badge ──────────────────────────────────── */}
+        {habit.streakFrozen && !isDefeated && (
           <div
             className="absolute top-3 right-3 text-xs px-2 py-0.5 rounded-full font-bold"
             style={{ background: "#1e3a5f", color: "#60a5fa", border: "1px solid #2563eb44" }}
