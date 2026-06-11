@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { GameProvider, useGame } from "./context/GameContext";
@@ -37,6 +37,12 @@ function GameUI() {
   const [activeTab, setActiveTab] = useState("quest");
   const { state } = useGame();
   const pendingNotifs = state.notifications.filter(n => !n.seen).length;
+
+  // The document is the real scroller (#root uses min-height), so a tab
+  // switch swaps screens but keeps the old scroll offset — reset it.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab]);
 
   return (
     <div className="flex flex-col flex-1 relative" style={{ minHeight: "100svh" }}>
