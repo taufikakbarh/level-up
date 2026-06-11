@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Mail, ArrowLeft, Loader } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import HeroAvatar from "./ui/HeroAvatar";
 
 const MODES = {
   CHOICE: "choice",
@@ -10,7 +11,7 @@ const MODES = {
 };
 
 export default function AuthScreen() {
-  const { signInWithMagicLink, signInWithGoogle } = useAuth();
+  const { signInWithMagicLink, signInWithGoogle, signInDemo } = useAuth();
   const [mode, setMode]       = useState(MODES.CHOICE);
   const [email, setEmail]     = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,9 +59,22 @@ export default function AuthScreen() {
         {/* ── CHOICE ─────────────────────────────────────── */}
         {mode === MODES.CHOICE && (
           <div className="animate-fadeIn">
-            <div className="text-center mb-10">
+            <div className="text-center mb-8">
+              {/* Emblem — the live hero, same art as the app icon */}
+              <div className="flex justify-center mb-5">
+                <div
+                  className="w-24 h-24 rounded-3xl flex items-center justify-center"
+                  style={{
+                    background: "radial-gradient(circle at 50% 40%, #1a1e2e, #0a0c14)",
+                    border: "1px solid rgba(245,200,66,0.35)",
+                    boxShadow: "0 0 36px rgba(245,200,66,0.18), inset 0 0 24px rgba(245,200,66,0.05)",
+                  }}
+                >
+                  <HeroAvatar stage={5} pose="idle" size={54} />
+                </div>
+              </div>
               <div
-                className="font-black text-5xl mb-3 tracking-wide"
+                className="font-black text-4xl mb-2 tracking-wide"
                 style={{ color: "#f5c842", textShadow: "0 0 30px #f5c84266" }}
               >
                 LEVEL UP
@@ -97,8 +111,43 @@ export default function AuthScreen() {
               Continue with Email
             </button>
 
-            <p className="text-center text-xs text-gray-600 mt-6 leading-relaxed">
+            {/* Dev-only sandbox — stripped from production builds */}
+            {import.meta.env.DEV && (
+              <button
+                onClick={signInDemo}
+                className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-bold text-sm tracking-wide mt-3 transition-all active:scale-95"
+                style={{
+                  background: "rgba(245,200,66,0.06)",
+                  color: "#f5c842",
+                  border: "1px dashed rgba(245,200,66,0.35)",
+                }}
+              >
+                🎮 Try the demo
+              </button>
+            )}
+
+            {/* Evolution teaser — Peasant to Legend */}
+            <div className="mt-8">
+              <div className="flex items-end justify-center gap-4">
+                {[1, 2, 3, 4, 5].map(stage => (
+                  <div key={stage} style={{ opacity: 0.45 + stage * 0.11 }}>
+                    <HeroAvatar stage={stage} pose="idle" size={16 + stage * 4} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-center text-xs text-gray-600 mt-3 tracking-wide">
+                Your habits forge the hero.
+              </p>
+            </div>
+
+            <p className="text-center text-xs text-gray-700 mt-6 leading-relaxed">
               New or returning — same button. We'll handle it.
+              {import.meta.env.DEV && (
+                <>
+                  <br />
+                  The demo runs locally with sample data — nothing is saved.
+                </>
+              )}
             </p>
           </div>
         )}

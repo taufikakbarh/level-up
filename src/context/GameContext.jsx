@@ -2,6 +2,7 @@ import { createContext, useContext, useReducer, useEffect, useCallback, useRef, 
 import { gameReducer, makeInitialState } from "../reducers/gameReducer";
 import { STARTER_HABIT_IDS } from "../constants/habitLibrary";
 import { loadPlayerState, syncAction } from "../lib/db";
+import { makeDemoState } from "../lib/demoData";
 
 const STORAGE_KEY = "levelup_v1_state";
 
@@ -9,21 +10,24 @@ const GameContext = createContext(null);
 
 // ── localStorage helpers (anonymous / offline fallback) ─────────
 
-function loadLocalState() {
+function loadLocalState(key) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
 
-function saveLocalState(state) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+function saveLocalState(key, state) {
+  try { localStorage.setItem(key, JSON.stringify(state)); } catch {}
 }
 
 // ── Provider ────────────────────────────────────────────────────
 
 export function GameProvider({ children, session }) {
-  const userId  = session?.user?.id ?? null;
+  // Demo sessions are memory-only: no Supabase, no localStorage —
+  // every reload reseeds the sandbox so it can be replayed endlessly.
+  const isDemo  = !!session?.isDemo;
+  const userId  = isDemo ? null : session?.user?.id ?? null;
   const isAuth  = !!userId;
 
   // While loading from Supabase we show a spinner
@@ -38,10 +42,10 @@ export function GameProvider({ children, session }) {
 
   // ── Initialise reducer ───────────────────────────────────────
   // Start from localStorage (instant); will be replaced by Supabase data
-  const saved = loadLocalState();
+  const saved = isDemo ? null : loadLocalState(STORAGE_KEY);
   const [state, dispatch] = useReducer(
     gameReducer,
-    saved ?? makeInitialState("Player", STARTER_HABIT_IDS)
+    saved ?? (isDemo ? makeDemoState() : makeInitialState("Player", STARTER_HABIT_IDS))
   );
 
   // ── Load from Supabase when authenticated ────────────────────
@@ -64,9 +68,11 @@ export function GameProvider({ children, session }) {
   }, [userId]);
 
   // ── Persist to localStorage on every state change ────────────
+  // (skipped in demo mode — the sandbox resets on reload)
   useEffect(() => {
-    saveLocalState(state);
-  }, [state]);
+    if (isDemo) return;
+    saveLocalState(STORAGE_KEY, state);
+  }, [state, isDemo]);
 
   // ── Wrapped dispatch: queue a Supabase sync after every action ─
   const dispatchAndSync = useCallback((action) => {
