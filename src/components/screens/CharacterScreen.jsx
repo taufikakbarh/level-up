@@ -4,7 +4,11 @@ import { useGame } from "../../context/GameContext";
 import { useAuth } from "../../context/AuthContext";
 import { STAT_META, TITLES, HABIT_LIBRARY } from "../../constants/habitLibrary";
 import { xpForLevel } from "../../reducers/gameReducer";
+import { heroProgress, totalXpOf } from "../../constants/hero";
+import { skillMetaFor, skillRankFor, nextSkillRank } from "../../constants/skills";
 import XPBar from "../ui/XPBar";
+import HeroAvatar from "../ui/HeroAvatar";
+import SkillStars from "../ui/SkillStars";
 
 const STAT_ORDER = ["vitality", "focus", "will", "output", "presence", "wisdom"];
 
@@ -12,8 +16,11 @@ export default function CharacterScreen() {
   const { state, setActiveTitle } = useGame();
   const { signOut } = useAuth();
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const { player, stats, playerHabits } = state;
-  const [tab, setTab] = useState("stats"); // "stats" | "titles"
+  const { player, stats, playerHabits, today } = state;
+  const [tab, setTab] = useState("stats"); // "stats" | "skills" | "titles"
+
+  const hero = heroProgress(totalXpOf(stats));
+  const heroPct = Math.min(100, (hero.xpInto / hero.xpNeeded) * 100);
 
   const activeHabits = playerHabits.filter(h => h.status !== "automated");
   const automatedHabits = playerHabits.filter(h => h.status === "automated");
@@ -33,17 +40,17 @@ export default function CharacterScreen() {
           boxShadow: "0 0 30px rgba(245,200,66,0.05)",
         }}
       >
-        {/* Avatar ring */}
+        {/* Hero avatar */}
         <div className="flex items-center gap-4 mb-4">
           <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-3xl shrink-0"
+            className="w-20 h-24 rounded-2xl flex items-center justify-center shrink-0"
             style={{
               background: "radial-gradient(circle, #1a1e2e, #0a0c14)",
               border: "2px solid #f5c842",
               boxShadow: "0 0 16px #f5c84244",
             }}
           >
-            ⚔️
+            <HeroAvatar stage={hero.stage.stage} pose="idle" size={56} />
           </div>
           <div className="flex-1">
             <div className="text-white font-black text-xl">{player.name}</div>
@@ -52,8 +59,23 @@ export default function CharacterScreen() {
                 「{activeTitleMeta.label}」
               </div>
             )}
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs font-bold mt-1">
+              <span style={{ color: "#f5c842" }}>{hero.stage.name}</span>
+              <span className="text-gray-400"> · Lv {hero.level}</span>
+            </div>
+            <div className="text-xs text-gray-500 mt-0.5">
               Day {player.dayCount} · Phase {player.currentPhase}
+            </div>
+            {/* Hero XP bar */}
+            <div className="mt-2 w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${heroPct}%`,
+                  background: "linear-gradient(90deg, #f5c842, #d97706)",
+                  transition: "width 0.8s cubic-bezier(0.4,0,0.2,1)",
+                }}
+              />
             </div>
           </div>
         </div>
@@ -72,7 +94,7 @@ export default function CharacterScreen() {
         className="flex rounded-xl p-1 mb-5"
         style={{ background: "#12151f", border: "1px solid #1f2335" }}
       >
-        {["stats", "titles"].map(t => (
+        {["stats", "skills", "titles"].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -83,7 +105,7 @@ export default function CharacterScreen() {
               border: tab === t ? "1px solid rgba(245,200,66,0.15)" : "1px solid transparent",
             }}
           >
-            {t === "stats" ? "📊 Stats" : "🏆 Titles"}
+            {t === "stats" ? "📊 Stats" : t === "skills" ? "⚜️ Skills" : "🏆 Titles"}
           </button>
         ))}
       </div>
@@ -150,6 +172,76 @@ export default function CharacterScreen() {
                 {/* Total XP */}
                 <div className="text-xs text-gray-600 mt-2">
                   Total XP earned: <span className="text-gray-400 font-bold">{val.totalXp}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Skills tab ──────────────────────────────────────── */}
+      {tab === "skills" && (
+        <div className="space-y-3 mb-4">
+          <div className="text-xs text-gray-600 uppercase tracking-widest font-bold mb-3">
+            Every habit is a skill — ranks never reset
+          </div>
+          {playerHabits.map(h => {
+            const skill = skillMetaFor(h.libraryId);
+            const effDays = h.daysActive + (today.completedHabitIds.includes(h.id) ? 1 : 0);
+            const rank = skillRankFor(effDays, h.status);
+            const next = nextSkillRank(effDays, h.status);
+            const isMastered = !next;
+            const pct = next
+              ? Math.min(100, ((effDays - rank.minDays) / (next.minDays - rank.minDays)) * 100)
+              : 100;
+
+            return (
+              <div
+                key={h.id}
+                className="rounded-2xl p-4"
+                style={{
+                  background: isMastered
+                    ? "linear-gradient(135deg, #12151f, #2a2310)"
+                    : "#12151f",
+                  border: `1px solid ${rank.color}${isMastered ? "66" : "33"}`,
+                  boxShadow: isMastered ? `0 0 16px ${rank.color}22` : "none",
+                }}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">{skill.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-black text-sm" style={{ color: rank.color }}>
+                      {skill.name}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">from: {h.name}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <SkillStars rank={rank} />
+                    <div className="text-xs font-bold uppercase tracking-wider mt-1" style={{ color: rank.color }}>
+                      {rank.label}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rank progress */}
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${pct}%`,
+                      background: rank.color,
+                      boxShadow: pct > 0 ? `0 0 6px ${rank.color}66` : "none",
+                      transition: "width 0.8s cubic-bezier(0.4,0,0.2,1)",
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                  <span>{effDays} days practiced</span>
+                  <span>
+                    {isMastered
+                      ? "★ MASTERED — part of who you are"
+                      : `${next.label} at ${next.minDays}d`}
+                  </span>
                 </div>
               </div>
             );

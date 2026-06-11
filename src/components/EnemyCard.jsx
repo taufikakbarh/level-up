@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { STAT_META, STREAK_MILESTONES, HABIT_LIBRARY } from "../constants/habitLibrary";
+import { skillMetaFor, skillRankFor, nextSkillRank } from "../constants/skills";
 import FloatingXP from "./ui/FloatingXP";
 import StreakPopup from "./ui/StreakPopup";
 import LevelUpOverlay from "./ui/LevelUpOverlay";
+import RankUpPopup from "./ui/RankUpPopup";
+import SkillStars from "./ui/SkillStars";
 
 const STAT_COLORS = {
   vitality: "#ef4444", focus: "#3b82f6", will: "#f59e0b",
@@ -25,17 +28,40 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
   const [phase, setPhase]           = useState("idle");
   const [showXP, setShowXP]         = useState(false);
   const [streakMilestone, setStreak] = useState(null);
+  const [particles, setParticles]   = useState(null);
+  const [rankUp, setRankUp]         = useState(null);
 
   const color   = STAT_COLORS[habit.stat] ?? "#ffffff";
   const meta    = STAT_META[habit.stat];
   const isMyXp  = lastXpGain?.habitId === habit.id;
   const showLevelUp = isMyXp && lastXpGain?.leveled && lastXpGain?.levelUps?.length > 0;
 
+  // Skill identity — rank is derived from lifetime days, +1 once
+  // completed today so the card responds immediately.
+  const skill        = skillMetaFor(habit.libraryId);
+  const effDays      = habit.daysActive + (completed ? 1 : 0);
+  const rank         = skillRankFor(effDays, habit.status);
+  const nextRank     = nextSkillRank(effDays, habit.status);
+
   function handleClick() {
     if (completed || phase !== "idle") return;
 
-    // 1. Shake
+    // 1. Shake + impact burst (particle directions rolled per hit)
     setPhase("shaking");
+    setParticles(
+      Array.from({ length: 9 }, (_, i) => {
+        const angle = (i / 9) * Math.PI * 2 + Math.random() * 0.6;
+        const dist  = 45 + Math.random() * 45;
+        return {
+          i,
+          dx: `${Math.cos(angle) * dist}px`,
+          dy: `${Math.sin(angle) * dist}px`,
+          delay: `${Math.random() * 0.1}s`,
+          color: i % 3 === 0 ? "#f5c842" : color,
+        };
+      })
+    );
+    setTimeout(() => setParticles(null), 700);
 
     // 2. Start HP drain after shake
     setTimeout(() => {
@@ -57,6 +83,13 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
       if (STREAK_MILESTONES.includes(nextStreak)) {
         setTimeout(() => setStreak(nextStreak), 300);
       }
+
+      // Skill rank-up check — completing today pushes effective days +1
+      const rankBefore = skillRankFor(habit.daysActive, habit.status);
+      const rankAfter  = skillRankFor(habit.daysActive + 1, habit.status);
+      if (rankAfter.id !== rankBefore.id) {
+        setTimeout(() => setRankUp(rankAfter), 600);
+      }
     }, SHAKE_MS + DRAIN_MS + DEFEAT_MS);
   }
 
@@ -76,6 +109,9 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
       {streakMilestone && (
         <StreakPopup milestone={streakMilestone} onDone={() => setStreak(null)} />
       )}
+      {rankUp && (
+        <RankUpPopup skill={skill} rank={rankUp} onDone={() => setRankUp(null)} />
+      )}
 
       <div
         onClick={handleClick}
@@ -89,6 +125,35 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
           boxShadow:   isDefeated ? "none" : `0 0 14px ${color}25, inset 0 0 24px ${color}07`,
         }}
       >
+        {/* Hit effects: flash, slash, particle burst */}
+        {particles && (
+          <div className="absolute inset-0 z-10 overflow-hidden rounded-2xl pointer-events-none">
+            <div
+              className="impact-flash"
+              style={{ background: `radial-gradient(circle, ${color}50, transparent 70%)` }}
+            />
+            <div
+              className="slash-line"
+              style={{ background: `linear-gradient(90deg, transparent, #ffffff, ${color}, transparent)` }}
+            />
+            {particles.map(p => (
+              <span
+                key={p.i}
+                className="hit-particle"
+                style={{
+                  left: "50%",
+                  top: "50%",
+                  background: p.color,
+                  boxShadow: `0 0 6px ${p.color}`,
+                  animationDelay: p.delay,
+                  "--dx": p.dx,
+                  "--dy": p.dy,
+                }}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Floating XP */}
         {showXP && isMyXp && (
           <FloatingXP
@@ -145,6 +210,20 @@ export default function EnemyCard({ habit, completed, onComplete, onUncomplete, 
               </div>
             )}
           </div>
+        </div>
+
+        {/* ── Skill badge ───────────────────────────────────── */}
+        <div className={`flex items-center gap-2 mb-3 ${isDefeated ? "opacity-50" : ""}`}>
+          <span className="text-xs">{skill.icon}</span>
+          <span className="text-xs font-bold tracking-wide" style={{ color: rank.color }}>
+            {skill.name}
+          </span>
+          <SkillStars rank={rank} size={7} />
+          <span className="text-xs text-gray-600 ml-auto">
+            {nextRank
+              ? `${rank.label} · next in ${nextRank.minDays - effDays}d`
+              : "★ MASTERED"}
+          </span>
         </div>
 
         {/* ── HP bar (active + draining) ─────────────────────── */}

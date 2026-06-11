@@ -1,10 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Zap, Flame, Shield, ChevronRight } from "lucide-react";
 import { useGame } from "../../context/GameContext";
 import { STAT_META } from "../../constants/habitLibrary";
 import EnemyCard from "../EnemyCard";
 import UpgradeModal from "../ui/UpgradeModal";
 import EndDaySummary from "../EndDaySummary";
+import HeroPanel from "../ui/HeroPanel";
+import ComboPopup from "../ui/ComboPopup";
+
+// Completions within this window chain into a combo (visual only)
+const COMBO_WINDOW_MS = 7000;
 
 const PHASE_LABELS = {
   1: { name: "INSTALL", subtitle: "Your foundation phase. Build the base.", goal: 7 },
@@ -18,6 +23,24 @@ export default function QuestScreen() {
 
   const [showSummary, setShowSummary] = useState(false);
   const [pendingUpgrade, setPendingUpgrade] = useState(null);
+
+  // Combo chain — ephemeral, resets if the window lapses or on undo
+  const comboRef = useRef({ count: 0, last: 0 });
+  const [combo, setCombo] = useState(null);
+
+  const handleComplete = useCallback((habitId) => {
+    completeHabit(habitId);
+    const now = Date.now();
+    const c = comboRef.current;
+    c.count = now - c.last <= COMBO_WINDOW_MS ? c.count + 1 : 1;
+    c.last = now;
+    if (c.count >= 2) setCombo({ count: c.count, id: now });
+  }, [completeHabit]);
+
+  const handleUncomplete = useCallback((habitId) => {
+    uncompleteHabit(habitId);
+    comboRef.current = { count: 0, last: 0 };
+  }, [uncompleteHabit]);
 
   const phase = PHASE_LABELS[player.currentPhase] ?? PHASE_LABELS[1];
   const completedIds = today.completedHabitIds;
@@ -114,6 +137,9 @@ export default function QuestScreen() {
         </div>
       </div>
 
+      {/* ── Hero ────────────────────────────────────────────── */}
+      <HeroPanel allDone={allDone} />
+
       {/* ── Streak multiplier banner ────────────────────────── */}
       {today.streakMultiplier > 1 && (
         <div
@@ -152,8 +178,8 @@ export default function QuestScreen() {
               key={habit.id}
               habit={habit}
               completed={false}
-              onComplete={completeHabit}
-              onUncomplete={uncompleteHabit}
+              onComplete={handleComplete}
+              onUncomplete={handleUncomplete}
               lastXpGain={_lastXpGain}
               dayEnded={today.dayEnded}
             />
@@ -166,8 +192,8 @@ export default function QuestScreen() {
               key={habit.id}
               habit={habit}
               completed={true}
-              onComplete={completeHabit}
-              onUncomplete={uncompleteHabit}
+              onComplete={handleComplete}
+              onUncomplete={handleUncomplete}
               lastXpGain={_lastXpGain}
               dayEnded={today.dayEnded}
             />
@@ -212,6 +238,11 @@ export default function QuestScreen() {
         >
           {allDone ? "⚔️  Claim Victory — End Day" : "End Day Early"}
         </button>
+      )}
+
+      {/* ── Combo popup ─────────────────────────────────────── */}
+      {combo && (
+        <ComboPopup combo={combo} onDone={() => setCombo(null)} />
       )}
 
       {/* ── Modals ──────────────────────────────────────────── */}
