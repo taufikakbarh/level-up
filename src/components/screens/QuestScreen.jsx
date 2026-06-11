@@ -11,6 +11,8 @@ import ComboPopup from "../ui/ComboPopup";
 // Completions within this window chain into a combo (visual only)
 const COMBO_WINDOW_MS = 7000;
 
+const STAT_TABS = ["all", "vitality", "focus", "will", "output", "presence", "wisdom"];
+
 const PHASE_LABELS = {
   1: { name: "INSTALL", subtitle: "Your foundation phase. Build the base.", goal: 7 },
   2: { name: "STACK",   subtitle: "You're building momentum. Stack it.",    goal: 21 },
@@ -23,6 +25,7 @@ export default function QuestScreen() {
 
   const [showSummary, setShowSummary] = useState(false);
   const [pendingUpgrade, setPendingUpgrade] = useState(null);
+  const [statFilter, setStatFilter] = useState("all");
 
   // Combo chain — ephemeral, resets if the window lapses or on undo
   const comboRef = useRef({ count: 0, last: 0 });
@@ -44,8 +47,9 @@ export default function QuestScreen() {
 
   const phase = PHASE_LABELS[player.currentPhase] ?? PHASE_LABELS[1];
   const completedIds = today.completedHabitIds;
-  const total = playerHabits.length;
-  const done = completedIds.length;
+  const battleHabits = playerHabits.filter(h => h.status !== "retired");
+  const total = battleHabits.length;
+  const done = battleHabits.filter(h => completedIds.includes(h.id)).length;
   const allDone = done === total && total > 0;
 
   // Auto-show summary when all habits defeated
@@ -168,11 +172,35 @@ export default function QuestScreen() {
           </div>
         ))}
 
+      {/* ── Category filter ─────────────────────────────────── */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 scrollbar-hide">
+        {STAT_TABS.map(t => {
+          const meta = t === "all" ? null : STAT_META[t];
+          const isActive = statFilter === t;
+          return (
+            <button
+              key={t}
+              onClick={() => setStatFilter(t)}
+              className="shrink-0 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-all"
+              style={{
+                background: isActive
+                  ? (meta ? meta.color : "#f5c842")
+                  : "rgba(255,255,255,0.05)",
+                color: isActive ? (t === "will" || t === "output" ? "#0a0c14" : "#fff") : "#6b7280",
+                border: isActive ? "none" : "1px solid rgba(255,255,255,0.06)",
+              }}
+            >
+              {meta ? `${meta.icon} ${meta.label}` : "ALL"}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Enemy cards ─────────────────────────────────────── */}
       <div className="mb-4">
         {/* Active (not defeated) first */}
-        {playerHabits
-          .filter(h => !completedIds.includes(h.id))
+        {battleHabits
+          .filter(h => (statFilter === "all" || h.stat === statFilter) && !completedIds.includes(h.id))
           .map(habit => (
             <EnemyCard
               key={habit.id}
@@ -185,8 +213,8 @@ export default function QuestScreen() {
             />
           ))}
         {/* Defeated */}
-        {playerHabits
-          .filter(h => completedIds.includes(h.id))
+        {battleHabits
+          .filter(h => (statFilter === "all" || h.stat === statFilter) && completedIds.includes(h.id))
           .map(habit => (
             <EnemyCard
               key={habit.id}
@@ -198,6 +226,12 @@ export default function QuestScreen() {
               dayEnded={today.dayEnded}
             />
           ))}
+        {/* Empty category */}
+        {statFilter !== "all" && !battleHabits.some(h => h.stat === statFilter) && (
+          <div className="text-center text-xs text-gray-600 py-8">
+            No active quests in this category yet — recruit one from the Codex.
+          </div>
+        )}
       </div>
 
       {/* ── Mini stat XP strip ──────────────────────────────── */}

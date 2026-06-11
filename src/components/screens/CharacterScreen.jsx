@@ -22,7 +22,7 @@ export default function CharacterScreen() {
   const hero = heroProgress(totalXpOf(stats));
   const heroPct = Math.min(100, (hero.xpInto / hero.xpNeeded) * 100);
 
-  const activeHabits = playerHabits.filter(h => h.status !== "automated");
+  const activeHabits = playerHabits.filter(h => h.status !== "automated" && h.status !== "retired");
   const automatedHabits = playerHabits.filter(h => h.status === "automated");
 
   const earnedTitles = new Set(player.titles);
@@ -210,8 +210,14 @@ export default function CharacterScreen() {
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">{skill.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-black text-sm" style={{ color: rank.color }}>
+                    <div className="font-black text-sm flex items-center gap-2" style={{ color: rank.color }}>
                       {skill.name}
+                      {h.status === "retired" && (
+                        <span className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(255,255,255,0.06)", color: "#9ca3af" }}>
+                          ⏸ PAUSED
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500 truncate">from: {h.name}</div>
                   </div>

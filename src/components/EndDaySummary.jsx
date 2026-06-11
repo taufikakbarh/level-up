@@ -19,8 +19,9 @@ export default function EndDaySummary({ onClose }) {
   const phaseProgress = Math.min(100, (player.dayCount / phase.max) * 100);
   const hero = heroProgress(totalXpOf(stats));
 
-  const pct = state.playerHabits.length > 0
-    ? today.completedHabitIds.length / state.playerHabits.length
+  const battleHabits = state.playerHabits.filter(h => h.status !== "retired");
+  const pct = battleHabits.length > 0
+    ? today.completedHabitIds.length / battleHabits.length
     : 0;
 
   const verdict =
@@ -82,7 +83,7 @@ export default function EndDaySummary({ onClose }) {
             {verdict.icon} {verdict.label}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {today.completedHabitIds.length}/{state.playerHabits.length} enemies defeated
+            {today.completedHabitIds.length}/{battleHabits.length} enemies defeated
             {today.totalXpToday > 0 && (
               <>
                 {" · "}

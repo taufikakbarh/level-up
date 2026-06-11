@@ -58,6 +58,7 @@ function rowToHabit(row) {
     isUpgraded:        row.is_upgraded,
     upgradeOfferedAt:  row.upgrade_offered_at,
     automatedAt:       row.automated_at,
+    addedOn:           row.added_on ?? null,
   };
 }
 
@@ -78,6 +79,7 @@ function habitToRow(playerId, habit) {
     is_upgraded:         habit.isUpgraded,
     upgrade_offered_at:  habit.upgradeOfferedAt,
     automated_at:        habit.automatedAt,
+    added_on:            habit.addedOn ?? null,
   };
 }
 
@@ -418,11 +420,22 @@ export async function syncAction(action, newState, prevState, userId) {
     }
 
     case "UNLOCK_NEW_HABIT": {
+      // Upsert: covers both a brand-new habit and resuming a retired one
       const { libraryId } = action;
       const habit = newState.playerHabits.find(h => h.libraryId === libraryId);
       if (habit) {
-        await supabase.from("player_habits").insert(habitToRow(userId, habit));
+        await supabase.from("player_habits").upsert(
+          habitToRow(userId, habit),
+          { onConflict: "id" }
+        );
       }
+      break;
+    }
+
+    case "RETIRE_HABIT": {
+      await supabase.from("player_habits")
+        .update({ status: "retired", streak_frozen: false, streak_broken: false })
+        .eq("id", action.habitId);
       break;
     }
 

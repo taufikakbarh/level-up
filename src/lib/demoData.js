@@ -56,6 +56,7 @@ function habitFrom(id, libraryId, overrides = {}) {
     isUpgraded: false,
     upgradeOfferedAt: null,
     automatedAt: null,
+    addedOn: null,
     ...overrides,
   };
 }
@@ -81,6 +82,8 @@ export function makeDemoState() {
     habitFrom("ph_005", "pre_1", { daysActive: 20, streak: 3, upgradeOfferedAt: 16 }),
     habitFrom("ph_006", "wis_2", { daysActive: 2,  streak: 2 }),
     habitFrom("ph_007", "wis_1", { daysActive: 70, streak: 70, status: "automated", automatedAt: 28, upgradeOfferedAt: 15 }),
+    // Retired quest — shows the paused state + "Resume" flow in the Codex
+    habitFrom("ph_008", "pre_3", { daysActive: 8, streak: 0, status: "retired", lastCompleted: localISO(6) }),
   ];
 
   const history = Array.from({ length: 7 }, (_, i) => {

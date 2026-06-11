@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from "react";
-import { gameReducer, makeInitialState } from "../reducers/gameReducer";
+import { gameReducer, makeInitialState, todayISO } from "../reducers/gameReducer";
 import { STARTER_HABIT_IDS } from "../constants/habitLibrary";
 import { loadPlayerState, syncAction } from "../lib/db";
 import { makeDemoState } from "../lib/demoData";
@@ -143,7 +143,18 @@ export function GameProvider({ children, session }) {
   }, [dispatchAndSync]);
 
   const unlockNewHabit = useCallback((libraryId) => {
-    dispatchAndSync({ type: "UNLOCK_NEW_HABIT", libraryId });
+    dispatchAndSync({
+      type: "UNLOCK_NEW_HABIT",
+      libraryId,
+      habitId: typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `ph_${Date.now()}`,
+      addedOn: todayISO(),
+    });
+  }, [dispatchAndSync]);
+
+  const retireHabit = useCallback((habitId) => {
+    dispatchAndSync({ type: "RETIRE_HABIT", habitId });
   }, [dispatchAndSync]);
 
   const markNotifSeen = useCallback((notifId) => {
@@ -169,6 +180,7 @@ export function GameProvider({ children, session }) {
       acceptUpgrade,
       dismissUpgrade,
       unlockNewHabit,
+      retireHabit,
       markNotifSeen,
       setActiveTitle,
       clearLastXpGain,
